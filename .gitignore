@@ -1,0 +1,15 @@
+# local config and data
+.env
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# build output
+/homeview
+/dist/
+
+# editors / OS
+.idea/
+.vscode/
+.DS_Store

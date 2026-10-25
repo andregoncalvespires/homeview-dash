@@ -1,0 +1,39 @@
+{{define "content"}}
+<h1>{{t .Lang "admin.groups.title"}}</h1>
+<p class="muted">{{t .Lang "admin.groups.intro"}}</p>
+<section class="panel">
+  <h2>{{t .Lang "admin.groups.new"}}</h2>
+  <form method="post" action="/admin/groups/save" class="form row">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>{{t .Lang "f.name"}}<input name="name" required maxlength="80"></label>
+    <label>{{t .Lang "f.position"}}<input type="number" name="position" value="0" min="-9999" max="9999"></label>
+    <button class="btn primary" type="submit">{{t .Lang "f.add"}}</button>
+  </form>
+</section>
+<div class="tablewrap">
+<table>
+  <tbody>
+  {{range .Data.Groups}}
+  <tr>
+    <td>
+      <form method="post" action="/admin/groups/save" class="form row">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+        <input name="name" value="{{.Name}}" required maxlength="80" aria-label="{{t $.Lang "f.name"}}">
+        <input type="number" name="position" value="{{.Position}}" min="-9999" max="9999" aria-label="{{t $.Lang "f.position"}}">
+        <button class="btn small" type="submit">{{t $.Lang "f.save"}}</button>
+      </form>
+    </td>
+    <td class="right">
+      <form method="post" action="/admin/groups/delete" class="inline" data-confirm="{{t $.Lang "f.confirm"}}">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+        <button class="btn small danger" type="submit">{{t $.Lang "f.delete"}}</button>
+      </form>
+    </td>
+  </tr>
+  {{else}}
+  <tr><td class="muted">{{t $.Lang "admin.groups.none"}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{end}}

@@ -1,0 +1,7 @@
+{{define "content"}}
+<section class="panel narrow">
+  <h1>{{.Data.Status}}</h1>
+  <p>{{t .Lang .Data.MessageKey}}</p>
+  <p><a class="btn" href="/">{{t .Lang "err.home"}}</a></p>
+</section>
+{{end}}

@@ -1,0 +1,30 @@
+{{define "content"}}
+{{if .Data.Groups}}
+<div class="toolbar">
+  <input id="q" type="search" placeholder="{{t .Lang "dash.search"}}" aria-label="{{t .Lang "dash.search"}}" autocomplete="off">
+</div>
+{{range .Data.Groups}}
+<section class="group">
+  <h2>{{.Name}}</h2>
+  <div class="grid">
+    {{range .Services}}
+    <article class="card" data-q="{{.Search}}">
+      <a class="card-main" href="{{.Primary}}">
+        <span class="icon">{{if .IconURL}}<img src="{{.IconURL}}" alt="" loading="lazy" referrerpolicy="no-referrer">{{else if .IconText}}{{.IconText}}{{else}}🔗{{end}}</span>
+        <span class="txt"><strong>{{.Name}}</strong>{{if .Description}}<small>{{.Description}}</small>{{end}}</span>
+      </a>
+      {{if .Secondary}}<a class="chip" href="{{.Secondary}}">{{if .PrimaryIsExternal}}{{t $.Lang "dash.internal"}}{{else}}{{t $.Lang "dash.external"}}{{end}}</a>{{end}}
+    </article>
+    {{end}}
+  </div>
+</section>
+{{end}}
+<p id="noresults" class="muted" hidden>{{t .Lang "dash.noresults"}}</p>
+{{else}}
+<section class="panel narrow">
+  <h1>{{t .Lang "dash.empty.title"}}</h1>
+  <p class="muted">{{t .Lang "dash.empty.text"}}</p>
+  {{if .User.IsAdmin}}<p><a class="btn primary" href="/admin/services">{{t .Lang "dash.empty.cta"}}</a></p>{{end}}
+</section>
+{{end}}
+{{end}}

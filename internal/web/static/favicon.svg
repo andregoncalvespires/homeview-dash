@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <defs>
+    <symbol id="icon" viewBox="0 0 24 24">
+      <path d="M3 11.5 12 4l9 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M5.5 10.5V20h13v-9.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+      <circle cx="12" cy="14.5" r="2.2" fill="currentColor"/>
+    </symbol>
+  </defs>
+  <rect width="24" height="24" rx="5" fill="#2563eb"/>
+  <use href="#icon" color="#fff"/>
+</svg>

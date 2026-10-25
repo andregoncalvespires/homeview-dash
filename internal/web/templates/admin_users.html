@@ -1,0 +1,41 @@
+{{define "content"}}
+<h1>{{t .Lang "admin.users.title"}}</h1>
+<p class="muted">{{t .Lang "admin.users.intro"}}</p>
+<section class="panel">
+  <h2>{{t .Lang "admin.users.new"}}</h2>
+  <form method="post" action="/admin/users/add" class="form row">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>{{t .Lang "f.email"}}<input type="email" name="email" required maxlength="254"></label>
+    <label>{{t .Lang "f.name"}}<input name="name" required maxlength="80"></label>
+    <label>{{t .Lang "f.role"}}
+      <select name="role">
+        <option value="user">{{t .Lang "role.user"}}</option>
+        <option value="admin">{{t .Lang "role.admin"}}</option>
+      </select>
+    </label>
+    <button class="btn primary" type="submit">{{t .Lang "f.add"}}</button>
+  </form>
+</section>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>{{t .Lang "f.name"}}</th><th>{{t .Lang "f.email"}}</th><th>{{t .Lang "f.role"}}</th><th></th></tr></thead>
+  <tbody>
+  {{range .Data.Users}}
+  <tr>
+    <td>{{.Name}}</td>
+    <td>{{.Email}}</td>
+    <td>{{if .IsAdmin}}{{t $.Lang "role.admin"}}{{else}}{{t $.Lang "role.user"}}{{end}}</td>
+    <td class="right">
+      {{if ne .ID $.User.ID}}
+      <form method="post" action="/admin/users/delete" class="inline" data-confirm="{{t $.Lang "f.confirm"}}">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+        <button class="btn small danger" type="submit">{{t $.Lang "f.delete"}}</button>
+      </form>
+      {{end}}
+    </td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{end}}

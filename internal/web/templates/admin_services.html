@@ -1,0 +1,50 @@
+{{define "content"}}
+<h1>{{t .Lang "admin.services.title"}}</h1>
+<section class="panel">
+  <h2>{{if .Data.Edit.ID}}{{t .Lang "admin.services.edit"}}{{else}}{{t .Lang "admin.services.new"}}{{end}}</h2>
+  <form method="post" action="/admin/services/save" class="form grid2">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="id" value="{{.Data.Edit.ID}}">
+    <label>{{t .Lang "f.name"}}<input name="name" value="{{.Data.Edit.Name}}" required maxlength="80"></label>
+    <label>{{t .Lang "f.group"}}
+      <select name="group_id">
+        <option value="0">{{t .Lang "f.nogroup"}}</option>
+        {{range .Data.Groups}}<option value="{{.ID}}"{{if eq .ID $.Data.Edit.GroupID}} selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+    </label>
+    <label>{{t .Lang "f.internal"}}<input name="internal_url" value="{{.Data.Edit.InternalURL}}" placeholder="http://192.168.1.10:8123" maxlength="2048"></label>
+    <label>{{t .Lang "f.external"}}<input name="external_url" value="{{.Data.Edit.ExternalURL}}" placeholder="https://ha.example.com" maxlength="2048"></label>
+    <label>{{t .Lang "f.description"}}<input name="description" value="{{.Data.Edit.Description}}" maxlength="200"></label>
+    <label>{{t .Lang "f.icon"}}<input name="icon" value="{{.Data.Edit.Icon}}" placeholder="🏠 / https://…/icon.png" maxlength="2048"><small class="muted">{{t .Lang "f.icon.help"}}</small></label>
+    <label>{{t .Lang "f.position"}}<input type="number" name="position" value="{{.Data.Edit.Position}}" min="-9999" max="9999"></label>
+    <div class="actions">
+      <button class="btn primary" type="submit">{{t .Lang "f.save"}}</button>
+      {{if .Data.Edit.ID}}<a class="btn" href="/admin/services">{{t .Lang "f.cancel"}}</a>{{end}}
+    </div>
+  </form>
+</section>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>{{t .Lang "f.name"}}</th><th>{{t .Lang "f.group"}}</th><th>{{t .Lang "f.internal"}}</th><th>{{t .Lang "f.external"}}</th><th></th></tr></thead>
+  <tbody>
+  {{range .Data.Rows}}
+  <tr>
+    <td>{{.Name}}</td>
+    <td>{{.GroupName}}</td>
+    <td class="url">{{.InternalURL}}</td>
+    <td class="url">{{.ExternalURL}}</td>
+    <td class="right nowrap">
+      <a class="btn small" href="/admin/services?edit={{.ID}}">{{t $.Lang "f.edit"}}</a>
+      <form method="post" action="/admin/services/delete" class="inline" data-confirm="{{t $.Lang "f.confirm"}}">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+        <button class="btn small danger" type="submit">{{t $.Lang "f.delete"}}</button>
+      </form>
+    </td>
+  </tr>
+  {{else}}
+  <tr><td colspan="5" class="muted">{{t $.Lang "admin.services.none"}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{end}}

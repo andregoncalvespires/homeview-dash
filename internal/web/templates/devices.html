@@ -1,0 +1,26 @@
+{{define "content"}}
+<h1>{{t .Lang "devices.title"}}</h1>
+<p class="muted">{{t .Lang "devices.intro"}}</p>
+<div class="tablewrap">
+<table>
+  <thead><tr><th>{{t .Lang "devices.device"}}</th><th>{{t .Lang "devices.created"}}</th><th>{{t .Lang "devices.lastseen"}}</th><th></th></tr></thead>
+  <tbody>
+  {{range .Data.Devices}}
+  <tr>
+    <td>{{.Label}}{{if .Current}} <span class="badge">{{t $.Lang "devices.current"}}</span>{{end}}</td>
+    <td>{{dt $.Lang .CreatedAt}}</td>
+    <td>{{dt $.Lang .LastSeen}}</td>
+    <td class="right">
+      {{if not .Current}}
+      <form method="post" action="/devices/revoke">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+        <button class="btn small danger" type="submit">{{t $.Lang "devices.revoke"}}</button>
+      </form>
+      {{end}}
+    </td>
+  </tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{end}}

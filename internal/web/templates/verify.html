@@ -1,0 +1,14 @@
+{{define "content"}}
+<section class="panel narrow">
+  <h1>{{t .Lang "verify.title"}}</h1>
+  <p class="muted">{{t .Lang "verify.intro"}} <strong>{{.Data.Email}}</strong></p>
+  <form method="post" action="/verify" class="form">
+    <input type="hidden" name="email" value="{{.Data.Email}}">
+    <label>{{t .Lang "verify.code"}}
+      <input class="code" type="text" name="code" inputmode="numeric" pattern="[0-9 ]*" maxlength="8" required autofocus autocomplete="one-time-code">
+    </label>
+    <button class="btn primary" type="submit">{{t .Lang "verify.submit"}}</button>
+  </form>
+  <p class="muted small"><a href="/login">{{t .Lang "verify.back"}}</a></p>
+</section>
+{{end}}

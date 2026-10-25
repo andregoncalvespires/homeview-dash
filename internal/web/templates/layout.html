@@ -1,0 +1,40 @@
+{{define "layout"}}<!doctype html>
+<html lang="{{.Lang}}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{{if .Title}}{{.Title}} · {{end}}HomeView</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><use href="/static/favicon.svg#icon"/></svg>HomeView</a>
+  {{if .User}}
+  <nav aria-label="menu">
+    {{if .User.IsAdmin}}
+    <a href="/admin/services">{{t .Lang "nav.services"}}</a>
+    <a href="/admin/groups">{{t .Lang "nav.groups"}}</a>
+    <a href="/admin/users">{{t .Lang "nav.users"}}</a>
+    {{end}}
+    <a href="/devices">{{t .Lang "nav.devices"}}</a>
+    <form method="post" action="/logout">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button class="linkbtn" type="submit">{{t .Lang "nav.logout"}} ({{.User.Name}})</button>
+    </form>
+  </nav>
+  {{end}}
+</header>
+<main>
+  {{if .Flash}}<div class="flash{{if .FlashErr}} err{{end}}" role="status">{{t .Lang .Flash}}</div>{{end}}
+  {{template "content" .}}
+</main>
+<footer>
+  <a href="/lang?set=pt-BR&amp;next={{.Path}}">Português</a> · <a href="/lang?set=en&amp;next={{.Path}}">English</a>
+  · <a href="https://github.com/andregoncalvespires/homeview-dash" rel="noopener noreferrer">HomeView</a>
+</footer>
+<script src="/static/app.js" defer></script>
+</body>
+</html>
+{{end}}
