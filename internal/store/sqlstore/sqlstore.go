@@ -662,6 +662,13 @@ func (s *Store) SetNodes(ctx context.Context, connID int64, nodes []store.Node) 
 		return err
 	}
 	defer tx.Rollback()
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM connections WHERE id = ?`, connID).Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		return store.ErrNotFound
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM nodes WHERE conn_id = ?`, connID); err != nil {
 		return err
 	}
