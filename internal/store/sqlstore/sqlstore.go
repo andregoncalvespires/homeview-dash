@@ -25,10 +25,13 @@ var schemaV2 string
 //go:embed schema_v3.sql
 var schemaV3 string
 
+//go:embed schema_v4.sql
+var schemaV4 string
+
 const splitMarker = "-- +split"
 
 // migrations are applied in order; PRAGMA user_version records how many ran.
-var migrations = []string{schemaV1, schemaV2, schemaV3}
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4}
 
 // Store is the SQLite-backed store.
 type Store struct{ db *sql.DB }
@@ -679,8 +682,8 @@ func (s *Store) GetPrefs(ctx context.Context, userID int64) (store.Prefs, error)
 	p := store.DefaultPrefs(userID)
 	var hasBg int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT theme, accent, bg_dim, bg_type != '', bg_version FROM user_prefs WHERE user_id = ?`, userID).
-		Scan(&p.Theme, &p.Accent, &p.BgDim, &hasBg, &p.BgVersion)
+		`SELECT theme, accent, bg_dim, bg_type != '', bg_version, bg_preset FROM user_prefs WHERE user_id = ?`, userID).
+		Scan(&p.Theme, &p.Accent, &p.BgDim, &hasBg, &p.BgVersion, &p.BgPreset)
 	if isNoRows(err) {
 		return p, nil
 	}
@@ -718,8 +721,8 @@ func (s *Store) GetBackground(ctx context.Context, userID int64) (string, []byte
 
 func (s *Store) SetBackground(ctx context.Context, userID int64, contentType string, data []byte, at time.Time) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO user_prefs(user_id, bg_type, bg_data, bg_version) VALUES(?, ?, ?, ?)
-		 ON CONFLICT(user_id) DO UPDATE SET bg_type = excluded.bg_type, bg_data = excluded.bg_data, bg_version = excluded.bg_version`,
+		`INSERT INTO user_prefs(user_id, bg_type, bg_data, bg_version, bg_preset) VALUES(?, ?, ?, ?, '')
+		 ON CONFLICT(user_id) DO UPDATE SET bg_type = excluded.bg_type, bg_data = excluded.bg_data, bg_version = excluded.bg_version, bg_preset = ''`,
 		userID, contentType, data, at.UnixNano())
 	if isFK(err) {
 		return store.ErrNotFound
@@ -728,6 +731,17 @@ func (s *Store) SetBackground(ctx context.Context, userID int64, contentType str
 }
 
 func (s *Store) ClearBackground(ctx context.Context, userID int64) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE user_prefs SET bg_type = '', bg_data = NULL, bg_version = 0 WHERE user_id = ?`, userID)
+	_, err := s.db.ExecContext(ctx, `UPDATE user_prefs SET bg_type = '', bg_data = NULL, bg_version = 0, bg_preset = '' WHERE user_id = ?`, userID)
+	return err
+}
+
+func (s *Store) SetBgPreset(ctx context.Context, userID int64, preset string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO user_prefs(user_id, bg_preset) VALUES(?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET bg_preset = excluded.bg_preset, bg_type = '', bg_data = NULL, bg_version = 0`,
+		userID, preset)
+	if isFK(err) {
+		return store.ErrNotFound
+	}
 	return err
 }

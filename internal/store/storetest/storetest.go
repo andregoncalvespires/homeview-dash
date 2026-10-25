@@ -437,9 +437,39 @@ func testPrefs(t *testing.T, s store.Store) {
 	if _, _, err := s.GetBackground(ctx, u.ID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("background after clear: %v", err)
 	}
-	if p, _ = s.GetPrefs(ctx, u.ID); p.HasBg || p.Theme != "light" || p.BgDim != 20 {
+	if p, _ = s.GetPrefs(ctx, u.ID); p.HasBg || p.ShowsBackground() || p.Theme != "light" || p.BgDim != 20 {
 		t.Fatalf("after clear = %+v", p)
 	}
+
+	// Bundled wallpapers: the default applies until chosen; an upload replaces it and vice versa.
+	u3, _ := s.CreateUser(ctx, "c@example.com", "Cy", store.RoleUser)
+	if p, _ = s.GetPrefs(ctx, u3.ID); p.BgPreset != store.DefaultBgPreset || !p.ShowsBackground() || p.HasBg {
+		t.Fatalf("default wallpaper = %+v", p)
+	}
+	must(t, s.SetBgPreset(ctx, u3.ID, "dunas")) // first write creates the row
+	if p, _ = s.GetPrefs(ctx, u3.ID); p.BgPreset != "dunas" || p.Theme != "auto" || p.BgDim != store.DefaultBgDim {
+		t.Fatalf("preset = %+v", p)
+	}
+	must(t, s.SetBackground(ctx, u3.ID, "image/png", img, at))
+	if p, _ = s.GetPrefs(ctx, u3.ID); !p.HasBg || p.BgPreset != "" {
+		t.Fatalf("upload should replace the preset: %+v", p)
+	}
+	must(t, s.SetBgPreset(ctx, u3.ID, "floresta"))
+	if p, _ = s.GetPrefs(ctx, u3.ID); p.HasBg || p.BgPreset != "floresta" {
+		t.Fatalf("preset should replace the upload: %+v", p)
+	}
+	if _, _, err := s.GetBackground(ctx, u3.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("upload survived a preset: %v", err)
+	}
+	must(t, s.SavePrefs(ctx, store.Prefs{UserID: u3.ID, Theme: "dark", BgDim: 10}))
+	if p, _ = s.GetPrefs(ctx, u3.ID); p.BgPreset != "floresta" {
+		t.Fatalf("SavePrefs lost the preset: %+v", p)
+	}
+	must(t, s.SetBgPreset(ctx, u3.ID, "")) // none
+	if p, _ = s.GetPrefs(ctx, u3.ID); p.ShowsBackground() {
+		t.Fatalf("none = %+v", p)
+	}
+	isErr(t, s.SetBgPreset(ctx, 9999, "dunas"), store.ErrNotFound)
 
 	// A background can be the very first thing a user sets.
 	u2, _ := s.CreateUser(ctx, "b@example.com", "Bob", store.RoleUser)

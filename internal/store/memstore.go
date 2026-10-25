@@ -609,6 +609,7 @@ func (m *MemStore) SetBackground(_ context.Context, userID int64, contentType st
 	}
 	r := m.prefsFor(userID)
 	r.HasBg, r.bgType, r.bgData, r.BgVersion = true, contentType, append([]byte(nil), data...), at.UnixNano()
+	r.BgPreset = ""
 	return nil
 }
 
@@ -617,7 +618,20 @@ func (m *MemStore) ClearBackground(_ context.Context, userID int64) error {
 	defer m.mu.Unlock()
 	if r, ok := m.prefs[userID]; ok {
 		r.HasBg, r.bgType, r.bgData, r.BgVersion = false, "", nil, 0
+		r.BgPreset = ""
 	}
+	return nil
+}
+
+func (m *MemStore) SetBgPreset(_ context.Context, userID int64, preset string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.users[userID]; !ok {
+		return ErrNotFound
+	}
+	r := m.prefsFor(userID)
+	r.HasBg, r.bgType, r.bgData, r.BgVersion = false, "", nil, 0
+	r.BgPreset = preset
 	return nil
 }
 

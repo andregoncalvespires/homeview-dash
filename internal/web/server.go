@@ -120,6 +120,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /settings", s.require(false, s.getSettings))
 	mux.HandleFunc("POST /settings/appearance", s.require(false, s.postAppearance))
 	mux.HandleFunc("POST /settings/background", s.requireLimit(false, uploadBodyBudget, s.postBackground))
+	mux.HandleFunc("POST /settings/background/preset", s.require(false, s.postBgPreset))
 	mux.HandleFunc("POST /settings/background/delete", s.require(false, s.deleteBackground))
 	mux.HandleFunc("GET /me/theme.css", s.require(false, s.getThemeCSS))
 	mux.HandleFunc("GET /me/background", s.require(false, s.getBackground))
@@ -296,7 +297,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, sess *session, n
 		p.User = sess.User
 		p.CSRF = s.auth.CSRF(sess.Device)
 		if pr, err := s.st.GetPrefs(r.Context(), sess.User.ID); err == nil {
-			p.Theme, p.HasBg, p.ThemeV = pr.Theme, pr.HasBg, themeVersion(pr)
+			p.Theme, p.HasBg, p.ThemeV = pr.Theme, pr.ShowsBackground() && backgroundURL(pr) != "", themeVersion(pr)
 		}
 	}
 	if p.Flash == "" { // one-shot messages travel as ?ok=key / ?err=key

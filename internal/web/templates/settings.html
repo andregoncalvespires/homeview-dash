@@ -35,6 +35,20 @@
 
 <section class="panel">
   <h2>{{t .Lang "settings.bg"}}</h2>
+  <p class="muted">{{t .Lang "settings.bg.presets"}}</p>
+  <form method="post" action="/settings/background/preset" class="walls">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    {{range .Data.Walls}}
+    <button class="wall" type="submit" name="preset" value="{{.ID}}"{{if .Selected}} aria-pressed="true"{{else}} aria-pressed="false"{{end}}>
+      <img src="{{.Thumb}}" alt="" loading="lazy" width="480" height="270">
+      <span>{{t $.Lang (printf "bg.%s" .ID)}}</span>
+    </button>
+    {{end}}
+    <button class="wall none" type="submit" name="preset" value=""{{if and (not .Data.BgURL) (eq .Data.Prefs.BgPreset "")}} aria-pressed="true"{{else}} aria-pressed="false"{{end}}>
+      <span>{{t .Lang "settings.bg.none"}}</span>
+    </button>
+  </form>
+  <h3>{{t .Lang "settings.bg.own"}}</h3>
   <p class="muted">{{t .Lang "settings.bg.help"}}</p>
   {{if .Data.BgURL}}<img class="bgprev" src="{{.Data.BgURL}}" alt="{{t .Lang "settings.bg"}}">{{end}}
   <form method="post" action="/settings/background" enctype="multipart/form-data" class="form row">

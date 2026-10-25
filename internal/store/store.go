@@ -137,19 +137,26 @@ const (
 // DefaultBgDim is how strongly the page colour is laid over a background image.
 const DefaultBgDim = 35
 
+// DefaultBgPreset is the bundled wallpaper a user gets until they choose.
+const DefaultBgPreset = "oceano"
+
 // Prefs are one user's appearance settings.
 type Prefs struct {
 	UserID    int64
 	Theme     string // ThemeAuto, ThemeLight or ThemeDark
 	Accent    string // "" (default) or "#rrggbb"
 	BgDim     int    // 0..80, percent of page colour over the image
-	HasBg     bool
-	BgVersion int64 // changes whenever the image does (cache busting)
+	HasBg     bool   // the user uploaded their own image
+	BgVersion int64  // changes whenever the image does (cache busting)
+	BgPreset  string // bundled wallpaper id, "" for none; an upload takes precedence
 }
+
+// ShowsBackground reports whether any background (upload or bundled) applies.
+func (p Prefs) ShowsBackground() bool { return p.HasBg || p.BgPreset != "" }
 
 // DefaultPrefs are used until a user changes something.
 func DefaultPrefs(userID int64) Prefs {
-	return Prefs{UserID: userID, Theme: ThemeAuto, BgDim: DefaultBgDim}
+	return Prefs{UserID: userID, Theme: ThemeAuto, BgDim: DefaultBgDim, BgPreset: DefaultBgPreset}
 }
 
 // ValidTheme reports whether t is a known theme.
@@ -226,7 +233,11 @@ type Store interface {
 	// GetBackground returns the stored image or ErrNotFound.
 	GetBackground(ctx context.Context, userID int64) (contentType string, data []byte, err error)
 	SetBackground(ctx context.Context, userID int64, contentType string, data []byte, at time.Time) error
+	// ClearBackground removes an uploaded image (and any bundled wallpaper).
 	ClearBackground(ctx context.Context, userID int64) error
+	// SetBgPreset picks a bundled wallpaper ("" for none) and drops any upload.
+	// The id is not checked here; the web layer validates it.
+	SetBgPreset(ctx context.Context, userID int64, preset string) error
 
 	// Discovery connections.
 	ListConnections(ctx context.Context) ([]Connection, error)

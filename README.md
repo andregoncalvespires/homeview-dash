@@ -105,7 +105,8 @@ No menu **Aparência**, cada pessoa escolhe, só para a sua conta e valendo em q
 
 - **Tema**: automático (segue o aparelho), claro ou escuro.
 - **Cor de destaque**: oito cores prontas ou qualquer outra (o texto sobre ela ajusta para branco ou escuro, mantendo o contraste).
-- **Imagem de fundo**: PNG, JPEG ou WebP de até 3 MB, com controle de esmaecimento para manter o texto legível. A imagem fica no banco (volume `/data`), só é entregue ao dono e SVG não é aceito.
+- **Fundos prontos**: 11 imagens originais (Oceano é o padrão; há também a opção "Sem fundo"). Gerar de novo: `python3 tools/backgrounds/gen.py <pasta>` (precisa de Pillow e numpy).
+- **Imagem de fundo própria**: PNG, JPEG ou WebP de até 3 MB, com controle de esmaecimento para manter o texto legível. A imagem fica no banco (volume `/data`), só é entregue ao dono e SVG não é aceito.
 
 ### Descoberta pelo Proxmox
 

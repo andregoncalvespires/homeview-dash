@@ -97,7 +97,7 @@ func TestAppearance(t *testing.T) {
 	}
 	r, css := e.get(ana, "/me/theme.css")
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "text/css") || !strings.Contains(css, "--accent:#7c3aed;--accent-text:#ffffff;") ||
-		strings.Contains(css, "has-bg") || !strings.Contains(r.Header.Get("Cache-Control"), "private") {
+		!strings.Contains(css, "url(/static/backgrounds/oceano.webp)") || !strings.Contains(r.Header.Get("Cache-Control"), "private") {
 		t.Errorf("theme.css (%s): %s", r.Header.Get("Cache-Control"), css)
 	}
 	// The settings page reflects the saved choice.
@@ -242,6 +242,76 @@ func TestBackgroundUpload(t *testing.T) {
 	}
 	if _, css := e.get(ana, "/me/theme.css"); strings.Contains(css, "has-bg") {
 		t.Error("css still references the removed image")
+	}
+}
+
+func TestBundledBackgrounds(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	ana := e.login("ana@example.com")
+	tok := e.csrf(ana)
+	u, _ := e.st.UserByEmail(ctx, "ana@example.com")
+	pick := func(id string) *http.Response {
+		r, _ := e.post(ana, "/settings/background/preset", url.Values{"csrf": {tok}, "preset": {id}})
+		return r
+	}
+
+	// The default applies from the start and the page offers every wallpaper.
+	if _, b := e.get(ana, "/"); !strings.Contains(b, `<body class="has-bg">`) {
+		t.Error("default wallpaper not applied")
+	}
+	_, page := e.get(ana, "/settings")
+	for _, want := range []string{`value="oceano" aria-pressed="true"`, `value="grafite" aria-pressed="false"`, `/static/backgrounds/dunas-thumb.webp`, "Oceano"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("settings page lacks %q", want)
+		}
+	}
+	if r, _ := e.get(ana, "/static/backgrounds/oceano.webp"); r.StatusCode != 200 {
+		t.Errorf("wallpaper not served: %d", r.StatusCode)
+	}
+
+	// Choosing one changes the stylesheet (and its cache key).
+	_, before := e.get(ana, "/")
+	if r := pick("dunas"); r.StatusCode != 303 || r.Header.Get("Location") != "/settings?ok=msg.bg_saved" {
+		t.Fatalf("pick: %d %q", r.StatusCode, r.Header.Get("Location"))
+	}
+	if _, css := e.get(ana, "/me/theme.css"); !strings.Contains(css, "url(/static/backgrounds/dunas.webp)") {
+		t.Errorf("css: %s", css)
+	}
+	if _, after := e.get(ana, "/"); after == before {
+		t.Error("theme.css cache key did not change")
+	}
+
+	// An upload replaces it; picking one again drops the upload.
+	if r := e.upload(ana, tok, "bg.png", tinyPNG(t)); r.StatusCode != 303 {
+		t.Fatal("upload failed")
+	}
+	if p, _ := e.st.GetPrefs(ctx, u.ID); !p.HasBg || p.BgPreset != "" {
+		t.Errorf("after upload: %+v", p)
+	}
+	pick("floresta")
+	if p, _ := e.st.GetPrefs(ctx, u.ID); p.HasBg || p.BgPreset != "floresta" {
+		t.Errorf("after preset: %+v", p)
+	}
+
+	// "No background", and hostile ids.
+	pick("")
+	if _, css := e.get(ana, "/me/theme.css"); strings.Contains(css, "has-bg") {
+		t.Error("background still applied after choosing none")
+	}
+	if _, b := e.get(ana, "/"); strings.Contains(b, "has-bg") {
+		t.Error("body still has-bg")
+	}
+	for _, bad := range []string{"../../etc/passwd", "nope", "dunas.webp", "x);}body{display:none"} {
+		if r := pick(bad); r.StatusCode != 400 {
+			t.Errorf("%q: %d", bad, r.StatusCode)
+		}
+	}
+	if r, _ := e.post(ana, "/settings/background/preset", url.Values{"preset": {"dunas"}}); r.StatusCode != 403 {
+		t.Errorf("no csrf: %d", r.StatusCode)
+	}
+	if p, _ := e.st.GetPrefs(ctx, u.ID); p.BgPreset != "" {
+		t.Errorf("rejected input changed prefs: %+v", p)
 	}
 }
 

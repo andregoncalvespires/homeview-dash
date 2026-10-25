@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andregoncalvespires/homeview-dash/internal/backgrounds"
 	"github.com/andregoncalvespires/homeview-dash/internal/store"
 )
 
@@ -36,7 +37,13 @@ type settingsData struct {
 	Presets  []presetView
 	Selected string // "", a preset ID or "custom"
 	Custom   string // colour shown in the custom picker
-	BgURL    string
+	BgURL    string // the user's own upload, if any
+	Walls    []wallView
+}
+
+type wallView struct {
+	ID, Thumb string
+	Selected  bool
 }
 
 func presetFor(accent string) (selected, custom string) {
@@ -58,7 +65,12 @@ func (s *Server) loadSettings(sess *session, p store.Prefs) settingsData {
 		d.Presets = append(d.Presets, presetView{a.ID, a.Hex})
 	}
 	d.Selected, d.Custom = presetFor(p.Accent)
-	d.BgURL = backgroundURL(p)
+	if p.HasBg {
+		d.BgURL = backgroundURL(p)
+	}
+	for _, b := range backgrounds.All {
+		d.Walls = append(d.Walls, wallView{b.ID, backgrounds.ThumbURL(b.ID), !p.HasBg && p.BgPreset == b.ID})
+	}
 	return d
 }
 
@@ -166,17 +178,35 @@ func (s *Server) deleteBackground(w http.ResponseWriter, r *http.Request, sess *
 	http.Redirect(w, r, "/settings?ok=msg.bg_removed", http.StatusSeeOther)
 }
 
+// backgroundURL is the image behind the page: the user's upload, else the
+// chosen bundled wallpaper, else "".
 func backgroundURL(p store.Prefs) string {
-	if !p.HasBg {
-		return ""
+	switch {
+	case p.HasBg:
+		return fmt.Sprintf("/me/background?v=%d-%d", p.UserID, p.BgVersion)
+	case p.BgPreset != "" && backgrounds.Valid(p.BgPreset):
+		return backgrounds.URL(p.BgPreset)
 	}
-	return fmt.Sprintf("/me/background?v=%d-%d", p.UserID, p.BgVersion)
+	return ""
+}
+
+func (s *Server) postBgPreset(w http.ResponseWriter, r *http.Request, sess *session) {
+	id := r.PostFormValue("preset")
+	if id != "" && !backgrounds.Valid(id) {
+		s.renderError(w, r, sess, http.StatusBadRequest, "err.badrequest")
+		return
+	}
+	if err := s.st.SetBgPreset(r.Context(), sess.User.ID, id); err != nil {
+		s.serverError(w, r, sess, err)
+		return
+	}
+	http.Redirect(w, r, "/settings?ok=msg.bg_saved", http.StatusSeeOther)
 }
 
 // themeVersion changes whenever the generated stylesheet would, so it can be
 // cached for a long time.
 func themeVersion(p store.Prefs) string {
-	return fmt.Sprintf("%d-%s-%d-%d", p.UserID, strings.TrimPrefix(p.Accent, "#"), p.BgDim, p.BgVersion)
+	return fmt.Sprintf("%d-%s-%d-%d-%s", p.UserID, strings.TrimPrefix(p.Accent, "#"), p.BgDim, p.BgVersion, p.BgPreset)
 }
 
 // contrastText picks black or white text for a #rrggbb background.
@@ -219,9 +249,9 @@ func (s *Server) getThemeCSS(w http.ResponseWriter, r *http.Request, sess *sessi
 		// html:root[data-theme] outranks the dark-mode defaults in app.css.
 		fmt.Fprintf(&b, "html:root[data-theme]{--accent:%s;--accent-text:%s;}\n", p.Accent, contrastText(p.Accent))
 	}
-	if p.HasBg {
+	if bg := backgroundURL(p); bg != "" {
 		fmt.Fprintf(&b, "body.has-bg{background-image:linear-gradient(color-mix(in srgb,var(--bg) %d%%,transparent),color-mix(in srgb,var(--bg) %d%%,transparent)),url(%s);"+
-			"background-size:cover;background-position:center;background-attachment:fixed;}\n", p.BgDim, p.BgDim, backgroundURL(p))
+			"background-size:cover;background-position:center;background-attachment:fixed;}\n", p.BgDim, p.BgDim, bg)
 		b.WriteString(".has-bg .panel,.has-bg .card,.has-bg .tablewrap,.has-bg .guests>li{background:color-mix(in srgb,var(--panel) 86%,transparent);" +
 			"-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);}\n")
 		b.WriteString(".has-bg .top,.has-bg footer{background:color-mix(in srgb,var(--panel) 70%,transparent);" +
