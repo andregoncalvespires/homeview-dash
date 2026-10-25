@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# "contents: write" is only used to commit go.mod/go.sum once (see last step).
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: false
+
+      - name: Resolve dependencies
+        run: |
+          if [ -f go.sum ]; then echo "HAD_SUM=true" >> "$GITHUB_ENV"; fi
+          go mod tidy
+
+      - name: gofmt
+        run: |
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then echo "Needs gofmt:"; echo "$out"; exit 1; fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Test (includes the real SQLite store)
+        run: go test -race -count=1 ./...
+
+      - name: Build
+        run: CGO_ENABLED=0 go build -o /dev/null ./cmd/homeview
+
+      # First run only: commit the go.mod/go.sum that "go mod tidy" produced,
+      # so builds are reproducible from then on.
+      - name: Commit go.mod and go.sum
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.HAD_SUM != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add go.mod go.sum
+          if git diff --cached --quiet; then echo "nothing to commit"; else
+            git commit -m "chore: add go.sum (go mod tidy)"
+            git push
+          fi

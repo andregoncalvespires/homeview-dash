@@ -1,0 +1,34 @@
+# HomeView — copy this file and .env.example (as .env) to a folder, edit .env, then:
+#   docker compose up -d
+#   docker compose exec -it homeview homeview admin create
+services:
+  homeview:
+    image: ghcr.io/andregoncalvespires/homeview-dash:latest
+    # build: .                      # uncomment to build from source instead
+    container_name: homeview
+    restart: unless-stopped
+    ports:
+      - "${HOMEVIEW_PORT:-8080}:8080"
+    environment:
+      TZ: ${TZ:-America/Sao_Paulo}
+      HOMEVIEW_LANG: ${HOMEVIEW_LANG:-pt-BR}
+      HOMEVIEW_BASE_URL: ${HOMEVIEW_BASE_URL:-http://localhost:8080}
+      HOMEVIEW_INTERNAL_HOSTS: ${HOMEVIEW_INTERNAL_HOSTS:-}
+      HOMEVIEW_SMTP_HOST: ${HOMEVIEW_SMTP_HOST:?Set HOMEVIEW_SMTP_HOST in .env}
+      HOMEVIEW_SMTP_PORT: ${HOMEVIEW_SMTP_PORT:-587}
+      HOMEVIEW_SMTP_SECURITY: ${HOMEVIEW_SMTP_SECURITY:-starttls}
+      HOMEVIEW_SMTP_USER: ${HOMEVIEW_SMTP_USER:-}
+      HOMEVIEW_SMTP_PASS: ${HOMEVIEW_SMTP_PASS:-}
+      HOMEVIEW_SMTP_FROM: ${HOMEVIEW_SMTP_FROM:-}
+    volumes:
+      - homeview-data:/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+
+volumes:
+  homeview-data:
