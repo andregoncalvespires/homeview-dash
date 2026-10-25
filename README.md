@@ -139,7 +139,7 @@ Encontrou uma falha? Abra uma *issue* sem detalhes exploráveis ou envie uma men
 
 ## Desenvolvimento
 
-Requer Go 1.24+.
+Requer a versão do Go indicada em `go.mod` (atualmente 1.26).
 
 ```bash
 go mod tidy

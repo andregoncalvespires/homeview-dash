@@ -139,7 +139,7 @@ Found a vulnerability? Please open an issue without exploitable details or messa
 
 ## Development
 
-Requires Go 1.24+.
+Requires the Go version declared in `go.mod` (currently 1.26).
 
 ```bash
 go mod tidy
