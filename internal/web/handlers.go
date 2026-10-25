@@ -138,6 +138,7 @@ type serviceView struct {
 	IconURL           string
 	IconText          string
 	Search            string
+	Status            string // running/stopped for services that came from discovery
 }
 
 type groupView struct {
@@ -157,6 +158,17 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 	if err != nil {
 		s.serverError(w, r, sess, err)
 		return
+	}
+	guests, err := s.st.ListGuests(r.Context())
+	if err != nil {
+		s.serverError(w, r, sess, err)
+		return
+	}
+	status := map[int64]string{} // service id -> last known guest status
+	for _, g := range guests {
+		if g.State == store.GuestApproved && !g.Missing && (g.Status == "running" || g.Status == "stopped") {
+			status[g.ServiceID] = g.Status
+		}
 	}
 	lang := s.lang(r)
 	internal := IsInternalHost(r.Host, s.cfg.InternalHosts)
@@ -178,6 +190,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 		view := serviceView{
 			Name: sv.Name, Description: sv.Description,
 			Primary: l.Primary, Secondary: l.Secondary, PrimaryIsExternal: l.PrimaryIsExternal,
+			Status: status[sv.ID],
 		}
 		low := strings.ToLower(sv.Icon)
 		if strings.HasPrefix(low, "http://") || strings.HasPrefix(low, "https://") {

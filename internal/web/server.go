@@ -16,6 +16,7 @@ import (
 
 	"github.com/andregoncalvespires/homeview-dash/internal/auth"
 	"github.com/andregoncalvespires/homeview-dash/internal/config"
+	"github.com/andregoncalvespires/homeview-dash/internal/discovery"
 	"github.com/andregoncalvespires/homeview-dash/internal/i18n"
 	"github.com/andregoncalvespires/homeview-dash/internal/store"
 )
@@ -31,7 +32,7 @@ const (
 // pageFiles are the templates rendered inside the shared layout.
 var pageFiles = []string{
 	"login", "verify", "dashboard", "devices",
-	"admin_services", "admin_groups", "admin_users", "error",
+	"admin_services", "admin_groups", "admin_users", "admin_connections", "admin_discovery", "error",
 }
 
 // Server wires everything together.
@@ -39,6 +40,7 @@ type Server struct {
 	cfg    config.Config
 	st     store.Store
 	auth   *auth.Service
+	disc   *discovery.Service // optional; see SetDiscovery
 	log    *slog.Logger
 	pages  map[string]*template.Template
 	static http.Handler
@@ -60,6 +62,21 @@ func New(cfg config.Config, st store.Store, a *auth.Service, log *slog.Logger) (
 	funcs := template.FuncMap{
 		"t":  i18n.T,
 		"dt": formatTime,
+		// dict lets a template pass several named values to a sub-template.
+		"dict": func(kv ...any) (map[string]any, error) {
+			if len(kv)%2 != 0 {
+				return nil, fmt.Errorf("dict: odd number of arguments")
+			}
+			m := make(map[string]any, len(kv)/2)
+			for i := 0; i < len(kv); i += 2 {
+				k, ok := kv[i].(string)
+				if !ok {
+					return nil, fmt.Errorf("dict: key %v is not a string", kv[i])
+				}
+				m[k] = kv[i+1]
+			}
+			return m, nil
+		},
 	}
 	for _, name := range pageFiles {
 		t, err := template.New(name).Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/"+name+".html")
@@ -109,6 +126,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /admin/groups", s.require(true, s.getAdminGroups))
 	mux.HandleFunc("POST /admin/groups/save", s.require(true, s.saveGroup))
 	mux.HandleFunc("POST /admin/groups/delete", s.require(true, s.deleteGroup))
+	mux.HandleFunc("GET /admin/discovery", s.require(true, s.getAdminDiscovery))
+	mux.HandleFunc("POST /admin/discovery/sync", s.require(true, s.syncDiscovery))
+	mux.HandleFunc("POST /admin/discovery/approve", s.require(true, s.approveGuest))
+	mux.HandleFunc("POST /admin/discovery/ignore", s.require(true, s.setGuestState(store.GuestIgnored, "msg.guest_ignored")))
+	mux.HandleFunc("POST /admin/discovery/restore", s.require(true, s.setGuestState(store.GuestNew, "msg.guest_restored")))
+	mux.HandleFunc("POST /admin/discovery/forget", s.require(true, s.forgetGuest))
+	mux.HandleFunc("GET /admin/connections", s.require(true, s.getAdminConnections))
+	mux.HandleFunc("POST /admin/connections/save", s.require(true, s.saveConnection))
+	mux.HandleFunc("POST /admin/connections/delete", s.require(true, s.deleteConnection))
 	mux.HandleFunc("GET /admin/users", s.require(true, s.getAdminUsers))
 	mux.HandleFunc("POST /admin/users/add", s.require(true, s.addUser))
 	mux.HandleFunc("POST /admin/users/delete", s.require(true, s.deleteUser))

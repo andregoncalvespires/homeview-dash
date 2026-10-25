@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/andregoncalvespires/homeview-dash/internal/i18n"
 	"github.com/andregoncalvespires/homeview-dash/internal/mail"
@@ -23,7 +24,10 @@ type Config struct {
 	// network" (besides private IPs and *.lan/*.local names), e.g. a split-DNS
 	// name like dash.casa.example.com.
 	InternalHosts []string
-	SMTP          mail.SMTP
+	// DiscoveryInterval is how often Proxmox connections are re-read in the
+	// background. Zero disables the loop (the "Sync now" button still works).
+	DiscoveryInterval time.Duration
+	SMTP              mail.SMTP
 }
 
 // FromEnv builds a Config from getenv (os.Getenv in production).
@@ -51,6 +55,19 @@ func FromEnv(getenv func(string) string) (Config, error) {
 			return c, fmt.Errorf("HOMEVIEW_COOKIE_SECURE: %w", err)
 		}
 		c.CookieSecure = b
+	}
+
+	c.DiscoveryInterval = 10 * time.Minute
+	if v := strings.TrimSpace(getenv("HOMEVIEW_DISCOVERY_INTERVAL")); v != "" {
+		if v == "0" || strings.EqualFold(v, "off") {
+			c.DiscoveryInterval = 0
+		} else {
+			d, err := time.ParseDuration(v)
+			if err != nil || d < time.Minute {
+				return c, fmt.Errorf("HOMEVIEW_DISCOVERY_INTERVAL must be a duration of at least 1m such as 10m or 1h (or 0 to disable), got %q", v)
+			}
+			c.DiscoveryInterval = d
+		}
 	}
 
 	port, err := strconv.Atoi(get("HOMEVIEW_SMTP_PORT", "587"))

@@ -19,6 +19,8 @@ type MemStore struct {
 	devices  map[int64]deviceRow
 	groups   map[int64]*Group
 	services map[int64]*Service
+	conns    map[int64]*Connection
+	guests   map[int64]*Guest
 }
 
 type linkToken struct {
@@ -41,6 +43,8 @@ func NewMemStore() *MemStore {
 		devices:  map[int64]deviceRow{},
 		groups:   map[int64]*Group{},
 		services: map[int64]*Service{},
+		conns:    map[int64]*Connection{},
+		guests:   map[int64]*Guest{},
 	}
 }
 
@@ -368,6 +372,177 @@ func (m *MemStore) DeleteService(_ context.Context, id int64) error {
 		return ErrNotFound
 	}
 	delete(m.services, id)
+	for _, g := range m.guests {
+		if g.ServiceID == id {
+			g.State, g.ServiceID = GuestNew, 0
+		}
+	}
+	return nil
+}
+
+func (m *MemStore) ListConnections(_ context.Context) ([]Connection, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]Connection, 0, len(m.conns))
+	for _, c := range m.conns {
+		out = append(out, *c)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := strings.ToLower(out[i].Name), strings.ToLower(out[j].Name)
+		if a != b {
+			return a < b
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
+func (m *MemStore) GetConnection(_ context.Context, id int64) (*Connection, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.conns[id]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	cp := *c
+	return &cp, nil
+}
+
+func (m *MemStore) SaveConnection(_ context.Context, c *Connection) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, o := range m.conns {
+		if o.ID != c.ID && o.Name == c.Name {
+			return ErrExists
+		}
+	}
+	if c.ID == 0 {
+		c.ID = m.id()
+	} else if _, ok := m.conns[c.ID]; !ok {
+		return ErrNotFound
+	}
+	cp := *c
+	m.conns[c.ID] = &cp
+	return nil
+}
+
+func (m *MemStore) DeleteConnection(_ context.Context, id int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.conns[id]; !ok {
+		return ErrNotFound
+	}
+	delete(m.conns, id)
+	for gid, g := range m.guests {
+		if g.ConnID == id {
+			delete(m.guests, gid)
+		}
+	}
+	return nil
+}
+
+func (m *MemStore) SetConnectionSync(_ context.Context, id int64, at time.Time, errMsg string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.conns[id]
+	if !ok {
+		return ErrNotFound
+	}
+	c.LastSync, c.LastError = at, errMsg
+	return nil
+}
+
+func (m *MemStore) ListGuests(_ context.Context) ([]Guest, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]Guest, 0, len(m.guests))
+	for _, g := range m.guests {
+		out = append(out, *g)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if a.ConnID != b.ConnID {
+			return a.ConnID < b.ConnID
+		}
+		if a.Node != b.Node {
+			return a.Node < b.Node
+		}
+		return a.VMID < b.VMID
+	})
+	return out, nil
+}
+
+func (m *MemStore) GetGuest(_ context.Context, id int64) (*Guest, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	g, ok := m.guests[id]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	cp := *g
+	return &cp, nil
+}
+
+func (m *MemStore) SyncGuests(_ context.Context, connID int64, found []Guest, now time.Time) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.conns[connID]; !ok {
+		return 0, ErrNotFound
+	}
+	seen := map[int]bool{}
+	added := 0
+	for _, f := range found {
+		seen[f.VMID] = true
+		var cur *Guest
+		for _, g := range m.guests {
+			if g.ConnID == connID && g.VMID == f.VMID {
+				cur = g
+				break
+			}
+		}
+		if cur == nil {
+			g := &Guest{ID: m.id(), ConnID: connID, VMID: f.VMID, Kind: f.Kind, Name: f.Name,
+				Node: f.Node, Status: f.Status, IP: f.IP, State: GuestNew, FirstSeen: now, LastSeen: now}
+			m.guests[g.ID] = g
+			added++
+			continue
+		}
+		cur.Kind, cur.Name, cur.Node, cur.Status, cur.IP = f.Kind, f.Name, f.Node, f.Status, f.IP
+		cur.Missing, cur.LastSeen = false, now
+	}
+	for _, g := range m.guests {
+		if g.ConnID == connID && !seen[g.VMID] {
+			g.Missing = true
+		}
+	}
+	return added, nil
+}
+
+func (m *MemStore) SetGuestState(_ context.Context, id int64, state GuestState, serviceID int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	g, ok := m.guests[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if state == GuestApproved {
+		if _, ok := m.services[serviceID]; !ok {
+			return ErrNotFound
+		}
+	} else {
+		serviceID = 0
+	}
+	g.State, g.ServiceID = state, serviceID
+	return nil
+}
+
+func (m *MemStore) DeleteGuest(_ context.Context, id int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.guests[id]; !ok {
+		return ErrNotFound
+	}
+	delete(m.guests, id)
 	return nil
 }
 

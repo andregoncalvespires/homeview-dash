@@ -1,0 +1,110 @@
+{{define "approve"}}
+{{/* args: dict-like via struct: .Row (guestRow), .Root (page) */}}
+<details class="approve"{{if .Row.Form.Open}} open{{end}}>
+  <summary class="btn small primary">{{t .Root.Lang "disc.add"}}</summary>
+  <form method="post" action="/admin/discovery/approve" class="form grid2">
+    <input type="hidden" name="csrf" value="{{.Root.CSRF}}"><input type="hidden" name="id" value="{{.Row.ID}}">
+    <label>{{t .Root.Lang "f.name"}}<input name="name" value="{{.Row.Form.Service.Name}}" required maxlength="80"></label>
+    <label>{{t .Root.Lang "f.group"}}<input name="group" list="groups" value="{{.Row.Form.Group}}" maxlength="80"><small class="muted">{{t .Root.Lang "disc.group.help"}}</small></label>
+    <label>{{t .Root.Lang "f.internal"}}<input name="internal_url" value="{{.Row.Form.Service.InternalURL}}" placeholder="http://{{if .Row.IP}}{{.Row.IP}}{{else}}192.168.1.10{{end}}:8080" maxlength="2048"><small class="muted">{{t .Root.Lang "disc.url.help"}}</small></label>
+    <label>{{t .Root.Lang "f.external"}}<input name="external_url" value="{{.Row.Form.Service.ExternalURL}}" placeholder="https://app.example.com" maxlength="2048"></label>
+    <label>{{t .Root.Lang "f.description"}}<input name="description" value="{{.Row.Form.Service.Description}}" maxlength="200"></label>
+    <label>{{t .Root.Lang "f.icon"}}<input name="icon" value="{{.Row.Form.Service.Icon}}" maxlength="2048"></label>
+    <div class="actions"><button class="btn primary" type="submit">{{t .Root.Lang "disc.approve"}}</button></div>
+  </form>
+</details>
+{{end}}
+
+{{define "guestmeta"}}{{with .G}}
+<strong>{{.Name}}</strong>
+<small class="muted">{{if eq .Kind "lxc"}}LXC{{else}}VM{{end}} {{.VMID}} · {{.Node}}{{if .IP}} · {{.IP}}{{end}}</small>
+<span class="state {{if eq .Status "running"}}ok{{else}}off{{end}}">{{if eq .Status "running"}}{{t $.Lang "status.running"}}{{else if eq .Status "stopped"}}{{t $.Lang "status.stopped"}}{{else}}{{.Status}}{{end}}</span>
+{{end}}{{end}}
+
+{{define "content"}}
+<h1>{{t .Lang "admin.disc.title"}}</h1>
+<p class="muted">{{t .Lang "admin.disc.intro"}}</p>
+
+{{if not .Data.Connection}}
+<section class="panel narrow wide">
+  <h2>{{t .Lang "admin.disc.noconn.title"}}</h2>
+  <p class="muted">{{t .Lang "admin.disc.noconn.text"}}</p>
+  <p><a class="btn primary" href="/admin/connections">{{t .Lang "admin.disc.noconn.cta"}}</a></p>
+</section>
+{{else}}
+<div class="toolbar actions">
+  <form method="post" action="/admin/discovery/sync" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <button class="btn primary" type="submit">{{t .Lang "disc.sync_all"}}</button>
+  </form>
+  <a class="btn" href="/admin/connections">{{t .Lang "nav.connections"}}</a>
+</div>
+<datalist id="groups">{{range .Data.Groups}}<option value="{{.Name}}">{{end}}</datalist>
+
+{{$root := .}}
+{{range .Data.Sections}}
+<section class="group">
+  <h2>{{.Conn.Name}}
+    {{if .Conn.LastError}}<span class="state bad">{{t $root.Lang "conn.error"}}</span>
+    {{else if not .Conn.LastSync.IsZero}}<small class="muted">{{t $root.Lang "conn.last"}} {{dt $root.Lang .Conn.LastSync}}</small>{{end}}
+  </h2>
+  {{if .Conn.LastError}}<p class="flash err">{{.Conn.LastError}}</p>{{end}}
+
+  <h3>{{t $root.Lang "disc.new"}} ({{len .New}})</h3>
+  {{if .New}}
+  <ul class="guests">
+    {{range .New}}
+    <li>
+      <div class="guest-head">
+        <div class="guest-info">{{template "guestmeta" (dict "G" . "Lang" $root.Lang)}}</div>
+        <form method="post" action="/admin/discovery/ignore" class="inline">
+          <input type="hidden" name="csrf" value="{{$root.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+          <button class="btn small" type="submit">{{t $root.Lang "disc.ignore"}}</button>
+        </form>
+      </div>
+      {{template "approve" (dict "Row" . "Root" $root)}}
+    </li>
+    {{end}}
+  </ul>
+  {{else}}<p class="muted">{{t $root.Lang "disc.none_new"}}</p>{{end}}
+
+  {{if .Approved}}
+  <h3>{{t $root.Lang "disc.approved"}} ({{len .Approved}})</h3>
+  <ul class="guests">
+    {{range .Approved}}
+    <li><div class="guest-head"><div class="guest-info">{{template "guestmeta" (dict "G" . "Lang" $root.Lang)}}{{if .Missing}} <span class="state bad">{{t $root.Lang "disc.gone"}}</span>{{end}}</div>
+      <a class="btn small" href="/admin/services?edit={{.ServiceID}}">{{if .ServiceName}}{{.ServiceName}}{{else}}{{t $root.Lang "f.edit"}}{{end}}</a></div></li>
+    {{end}}
+  </ul>
+  {{end}}
+
+  {{if .Ignored}}
+  <details class="fold"><summary>{{t $root.Lang "disc.ignored"}} ({{len .Ignored}})</summary>
+  <ul class="guests">
+    {{range .Ignored}}
+    <li><div class="guest-head"><div class="guest-info">{{template "guestmeta" (dict "G" . "Lang" $root.Lang)}}</div>
+      <form method="post" action="/admin/discovery/restore" class="inline">
+        <input type="hidden" name="csrf" value="{{$root.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+        <button class="btn small" type="submit">{{t $root.Lang "disc.restore"}}</button>
+      </form></div></li>
+    {{end}}
+  </ul></details>
+  {{end}}
+
+  {{if .Missing}}
+  <details class="fold"><summary>{{t $root.Lang "disc.missing"}} ({{len .Missing}})</summary>
+  <p class="muted">{{t $root.Lang "disc.missing.help"}}</p>
+  <ul class="guests">
+    {{range .Missing}}
+    <li><div class="guest-head"><div class="guest-info">{{template "guestmeta" (dict "G" . "Lang" $root.Lang)}}</div>
+      <form method="post" action="/admin/discovery/forget" class="inline">
+        <input type="hidden" name="csrf" value="{{$root.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+        <button class="btn small danger" type="submit">{{t $root.Lang "disc.forget"}}</button>
+      </form></div></li>
+    {{end}}
+  </ul></details>
+  {{end}}
+</section>
+{{end}}
+{{end}}
+{{end}}

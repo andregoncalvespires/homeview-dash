@@ -16,18 +16,18 @@ O HomeView é uma alternativa simples a painéis como Heimdall e Homarr, pensada
 - **Dois endereços por serviço** (interno e externo). O painel destaca o endereço certo conforme você acessa de casa ou de fora, e mostra o outro como atalho.
 - **Interface em português e inglês**, clara no tema claro e no escuro, com busca instantânea (tecle `/`).
 
-### O que já funciona (v0.1)
+### O que já funciona (v0.2)
 
 - Login por código de e-mail + cookie por dispositivo, com tela "Meus dispositivos" para revogar.
 - Administrador criado pelo console, **sem gravar nada no `docker-compose.yml`**.
 - Usuários, grupos e serviços (nome, descrição, ícone, URL interna, URL externa, posição).
 - Link de acesso único pelo console, para recuperação caso o e-mail falhe.
+- **Descoberta pelo Proxmox** (v0.2): lê as VMs e LXCs do seu servidor ou cluster, você aprova o que vai para o painel e o ponto verde/cinza mostra se estão rodando.
 
 ### O que vem a seguir
 
 | Versão | Entrega |
 |---|---|
-| v0.2 | Descoberta automática de VMs e LXCs pela API do Proxmox, com aprovação pelo administrador |
 | v0.3 | Agente leve para listar os containers Docker de cada máquina (labels `homeview.*` opcionais) |
 | v0.4 | Importar/exportar YAML, visões por hierarquia/tipo, permissões por grupo |
 
@@ -70,6 +70,7 @@ Tudo é feito por variáveis de ambiente, normalmente no arquivo `.env`.
 | `HOMEVIEW_PORT` | `8080` | Porta publicada no host (no compose). O container escuta sempre em 8080. |
 | `HOMEVIEW_LANG` | `pt-BR` | Idioma padrão (`pt-BR` ou `en`). Cada usuário pode trocar no rodapé. |
 | `HOMEVIEW_INTERNAL_HOSTS` | *(vazio)* | Nomes extras que significam "estou na rede local", separados por vírgula. |
+| `HOMEVIEW_DISCOVERY_INTERVAL` | `10m` | De quanto em quanto tempo reler as conexões Proxmox (`30m`, `1h`…, mínimo `1m`; `0` desliga e deixa só o botão "Sincronizar agora"). |
 | `HOMEVIEW_SMTP_HOST` | *(obrigatório)* | Servidor SMTP. |
 | `HOMEVIEW_SMTP_PORT` | `587` | Porta SMTP. |
 | `HOMEVIEW_SMTP_SECURITY` | `starttls` | `starttls` (587), `tls` (465) ou `none` (apenas relay local confiável). |
@@ -88,6 +89,29 @@ Cada serviço pode ter uma **URL interna** (ex.: `http://192.168.1.10:8123`) e u
 - Se o serviço tem só uma URL, ela é sempre o botão principal.
 
 Se você usa DNS interno com um nome "público" (ex.: `dash.casa.exemplo.com` apontando para um IP local), liste esse nome em `HOMEVIEW_INTERNAL_HOSTS`.
+
+### Descoberta pelo Proxmox
+
+O HomeView lista as VMs (qemu) e os LXCs do Proxmox e deixa você escolher o que entra no painel. Ele só **lê** o Proxmox e **nunca cria nada sozinho**: o que é descoberto fica numa lista de "Novos" até um administrador clicar em **Adicionar ao painel**. O Proxmox não informa a porta dos serviços, então você completa a URL (o IP já vem preenchido quando o Proxmox o conhece).
+
+**1. Crie um token só de leitura no Proxmox** (interface web):
+
+1. *Datacenter → Permissions → Users*: crie `homeview@pve` (realm "Proxmox VE authentication server").
+2. *Datacenter → Permissions → API Tokens*: crie o token com ID `dashboard`, mantendo **Privilege Separation** marcado. Copie o segredo, que aparece uma única vez.
+3. *Datacenter → Permissions → Add*: dê o papel **PVEAuditor** no caminho `/` para o **token** `homeview@pve!dashboard` e também para o **usuário** `homeview@pve`.
+
+**2. Cadastre a conexão** em **Descobertas → Conexões** (menu do admin): nome, URL (`https://IP:8006`), ID do token (`homeview@pve!dashboard`) e o segredo. O HomeView testa o acesso antes de salvar e não grava nada se falhar.
+
+**3. Aprove o que quiser** em **Descobertas**. Cada item vira um serviço, no grupo que você escolher (por padrão, o nome do nó do Proxmox, criado se não existir).
+
+Pontos importantes:
+
+- **Certificado**: o Proxmox usa certificado autoassinado por padrão. O jeito seguro é colar a **impressão digital SHA-256** (*Nó → System → Certificates*) no campo próprio: o HomeView passa a confiar só naquele certificado. A opção "não verificar o certificado" existe, mas é último recurso.
+- **O segredo do token fica cifrado** no banco (AES-256-GCM, com chave derivada do segredo do servidor, gerado na primeira execução e guardado no volume `/data`). Ele nunca aparece nas telas nem nos logs. Se você perder o volume ou trocar o segredo do servidor, edite a conexão e informe o token de novo.
+- **Rede**: o container precisa alcançar `https://IP:8006` do Proxmox (na rede local normalmente funciona sem ajuste).
+- **IP do convidado** (best effort): LXC em execução informa o IP pela API; em VM, só com o *QEMU Guest Agent* instalado e habilitado. Sem IP, digite a URL.
+- **Sincronização**: automática a cada `HOMEVIEW_DISCOVERY_INTERVAL` e manual pelo botão. O que sumir do Proxmox fica marcado e você decide se esquece; um item volta sozinho se reaparecer. Excluir um serviço devolve o item à lista de "Novos". Itens "Ignorados" podem ser restaurados.
+- **Status**: serviços vindos do Proxmox mostram um ponto no cartão (verde = em execução, vazio = parado), conforme a última sincronização.
 
 ### Configurando o e-mail
 

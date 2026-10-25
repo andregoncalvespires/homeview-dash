@@ -19,10 +19,13 @@ import (
 //go:embed schema.sql
 var schemaV1 string
 
+//go:embed schema_v2.sql
+var schemaV2 string
+
 const splitMarker = "-- +split"
 
 // migrations are applied in order; PRAGMA user_version records how many ran.
-var migrations = []string{schemaV1}
+var migrations = []string{schemaV1, schemaV2}
 
 // Store is the SQLite-backed store.
 type Store struct{ db *sql.DB }
@@ -464,5 +467,205 @@ func (s *Store) SaveService(ctx context.Context, v *store.Service) error {
 }
 
 func (s *Store) DeleteService(ctx context.Context, id int64) error {
-	return affected(s.db.ExecContext(ctx, `DELETE FROM services WHERE id = ?`, id))
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// The guest that produced this service goes back to the "new" list.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE guests SET state = 'new', service_id = NULL WHERE service_id = ?`, id); err != nil {
+		return err
+	}
+	if err := affected(tx.ExecContext(ctx, `DELETE FROM services WHERE id = ?`, id)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// ---- discovery: connections ----
+
+const connCols = `id, name, url, token_id, secret, insecure, fingerprint, last_sync, last_error`
+
+func scanConnection(r scanner) (*store.Connection, error) {
+	var c store.Connection
+	var insecure int
+	var last int64
+	if err := r.Scan(&c.ID, &c.Name, &c.URL, &c.TokenID, &c.SecretSealed, &insecure, &c.Fingerprint, &last, &c.LastError); err != nil {
+		if isNoRows(err) {
+			return nil, store.ErrNotFound
+		}
+		return nil, err
+	}
+	c.Insecure = insecure != 0
+	if last > 0 {
+		c.LastSync = fromTS(last)
+	}
+	return &c, nil
+}
+
+func (s *Store) ListConnections(ctx context.Context) ([]store.Connection, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+connCols+` FROM connections ORDER BY LOWER(name), id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []store.Connection
+	for rows.Next() {
+		c, err := scanConnection(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *c)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetConnection(ctx context.Context, id int64) (*store.Connection, error) {
+	return scanConnection(s.db.QueryRowContext(ctx, `SELECT `+connCols+` FROM connections WHERE id = ?`, id))
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+func (s *Store) SaveConnection(ctx context.Context, c *store.Connection) error {
+	if c.ID == 0 {
+		res, err := s.db.ExecContext(ctx,
+			`INSERT INTO connections(name, url, token_id, secret, insecure, fingerprint) VALUES(?, ?, ?, ?, ?, ?)`,
+			c.Name, c.URL, c.TokenID, c.SecretSealed, boolInt(c.Insecure), c.Fingerprint)
+		if isUnique(err) {
+			return store.ErrExists
+		}
+		if err != nil {
+			return err
+		}
+		c.ID, err = res.LastInsertId()
+		return err
+	}
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE connections SET name = ?, url = ?, token_id = ?, secret = ?, insecure = ?, fingerprint = ? WHERE id = ?`,
+		c.Name, c.URL, c.TokenID, c.SecretSealed, boolInt(c.Insecure), c.Fingerprint, c.ID)
+	if isUnique(err) {
+		return store.ErrExists
+	}
+	return affected(res, err)
+}
+
+func (s *Store) DeleteConnection(ctx context.Context, id int64) error {
+	return affected(s.db.ExecContext(ctx, `DELETE FROM connections WHERE id = ?`, id))
+}
+
+func (s *Store) SetConnectionSync(ctx context.Context, id int64, at time.Time, errMsg string) error {
+	return affected(s.db.ExecContext(ctx,
+		`UPDATE connections SET last_sync = ?, last_error = ? WHERE id = ?`, ts(at), errMsg, id))
+}
+
+// ---- discovery: guests ----
+
+const guestCols = `id, conn_id, vmid, kind, name, node, status, ip, state, missing, service_id, first_seen, last_seen`
+
+func scanGuest(r scanner) (*store.Guest, error) {
+	var g store.Guest
+	var missing int
+	var state string
+	var svc sql.NullInt64
+	var first, last int64
+	if err := r.Scan(&g.ID, &g.ConnID, &g.VMID, &g.Kind, &g.Name, &g.Node, &g.Status, &g.IP,
+		&state, &missing, &svc, &first, &last); err != nil {
+		if isNoRows(err) {
+			return nil, store.ErrNotFound
+		}
+		return nil, err
+	}
+	g.State, g.Missing, g.ServiceID = store.GuestState(state), missing != 0, svc.Int64
+	g.FirstSeen, g.LastSeen = fromTS(first), fromTS(last)
+	return &g, nil
+}
+
+func (s *Store) ListGuests(ctx context.Context) ([]store.Guest, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+guestCols+` FROM guests ORDER BY conn_id, node, vmid`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []store.Guest
+	for rows.Next() {
+		g, err := scanGuest(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *g)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetGuest(ctx context.Context, id int64) (*store.Guest, error) {
+	return scanGuest(s.db.QueryRowContext(ctx, `SELECT `+guestCols+` FROM guests WHERE id = ?`, id))
+}
+
+func (s *Store) SyncGuests(ctx context.Context, connID int64, found []store.Guest, now time.Time) (int, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM connections WHERE id = ?`, connID).Scan(&exists); err != nil {
+		return 0, err
+	}
+	if exists == 0 {
+		return 0, store.ErrNotFound
+	}
+	// Everything starts as missing; what the server returned is cleared below.
+	if _, err := tx.ExecContext(ctx, `UPDATE guests SET missing = 1 WHERE conn_id = ?`, connID); err != nil {
+		return 0, err
+	}
+	added := 0
+	for _, f := range found {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE guests SET kind = ?, name = ?, node = ?, status = ?, ip = ?, missing = 0, last_seen = ?
+			 WHERE conn_id = ? AND vmid = ?`,
+			f.Kind, f.Name, f.Node, f.Status, f.IP, ts(now), connID, f.VMID)
+		if err != nil {
+			return 0, err
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO guests(conn_id, vmid, kind, name, node, status, ip, state, missing, first_seen, last_seen)
+			 VALUES(?, ?, ?, ?, ?, ?, ?, 'new', 0, ?, ?)`,
+			connID, f.VMID, f.Kind, f.Name, f.Node, f.Status, f.IP, ts(now), ts(now)); err != nil {
+			return 0, err
+		}
+		added++
+	}
+	return added, tx.Commit()
+}
+
+func (s *Store) SetGuestState(ctx context.Context, id int64, state store.GuestState, serviceID int64) error {
+	if !state.Valid() {
+		return fmt.Errorf("invalid guest state %q", state)
+	}
+	var svc any
+	if state == store.GuestApproved {
+		svc = nullID(serviceID)
+		if svc == nil {
+			return store.ErrNotFound
+		}
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE guests SET state = ?, service_id = ? WHERE id = ?`, string(state), svc, id)
+	if isFK(err) {
+		return store.ErrNotFound
+	}
+	return affected(res, err)
+}
+
+func (s *Store) DeleteGuest(ctx context.Context, id int64) error {
+	return affected(s.db.ExecContext(ctx, `DELETE FROM guests WHERE id = ?`, id))
 }

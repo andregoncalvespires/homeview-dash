@@ -12,6 +12,7 @@
       <a class="card-main" href="{{.Primary}}">
         <span class="icon">{{if .IconURL}}<img src="{{.IconURL}}" alt="" loading="lazy" referrerpolicy="no-referrer">{{else if .IconText}}{{.IconText}}{{else}}🔗{{end}}</span>
         <span class="txt"><strong>{{.Name}}</strong>{{if .Description}}<small>{{.Description}}</small>{{end}}</span>
+        {{if .Status}}<span class="dot {{.Status}}" role="img" aria-label="{{t $.Lang (printf "status.%s" .Status)}}" title="{{t $.Lang (printf "status.%s" .Status)}}"></span>{{end}}
       </a>
       {{if .Secondary}}<a class="chip" href="{{.Secondary}}">{{if .PrimaryIsExternal}}{{t $.Lang "dash.internal"}}{{else}}{{t $.Lang "dash.external"}}{{end}}</a>{{end}}
     </article>

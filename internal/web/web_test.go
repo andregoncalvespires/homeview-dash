@@ -46,6 +46,7 @@ type env struct {
 	st   *store.MemStore
 	mail *fakeMail
 	auth *auth.Service
+	web  *Server
 }
 
 func newEnv(t *testing.T) *env {
@@ -61,7 +62,7 @@ func newEnv(t *testing.T) *env {
 	s.run = func(f func()) { f() }
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
-	e := &env{t: t, srv: srv, st: st, mail: m, auth: a}
+	e := &env{t: t, srv: srv, st: st, mail: m, auth: a, web: s}
 	for _, u := range []struct {
 		email, name string
 		role        store.Role

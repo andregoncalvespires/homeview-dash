@@ -20,6 +20,7 @@ func Run(t *testing.T, newStore func(t *testing.T) store.Store) {
 	t.Run("link tokens", func(t *testing.T) { testLinks(t, newStore(t)) })
 	t.Run("devices", func(t *testing.T) { testDevices(t, newStore(t)) })
 	t.Run("groups and services", func(t *testing.T) { testCatalog(t, newStore(t)) })
+	t.Run("discovery", func(t *testing.T) { testDiscovery(t, newStore(t)) })
 }
 
 var ctx = context.Background()
@@ -243,5 +244,136 @@ func testCatalog(t *testing.T, s store.Store) {
 	must(t, s.DeleteService(ctx, a.ID))
 	isErr(t, s.DeleteService(ctx, a.ID), store.ErrNotFound)
 	_, err = s.GetService(ctx, a.ID)
+	isErr(t, err, store.ErrNotFound)
+}
+
+func testDiscovery(t *testing.T, s store.Store) {
+	now := time.Now().Truncate(time.Second)
+
+	c := &store.Connection{Name: "casa", URL: "https://pve:8006", TokenID: "u@pve!t", SecretSealed: "v1:abc", Fingerprint: "AA"}
+	must(t, s.SaveConnection(ctx, c))
+	if c.ID == 0 {
+		t.Fatal("no connection id")
+	}
+	isErr(t, s.SaveConnection(ctx, &store.Connection{Name: "casa", URL: "https://x", TokenID: "a!b", SecretSealed: "s"}), store.ErrExists)
+	other := &store.Connection{Name: "sitio", URL: "https://pve2:8006", TokenID: "u@pve!t", SecretSealed: "v1:def", Insecure: true}
+	must(t, s.SaveConnection(ctx, other))
+	other.Name = "casa" // renaming onto an existing name must fail too
+	isErr(t, s.SaveConnection(ctx, other), store.ErrExists)
+	isErr(t, s.SaveConnection(ctx, &store.Connection{ID: 9999, Name: "ghost", URL: "u", TokenID: "a!b", SecretSealed: "s"}), store.ErrNotFound)
+
+	c.URL = "https://pve.lan:8006"
+	must(t, s.SaveConnection(ctx, c))
+	got, err := s.GetConnection(ctx, c.ID)
+	must(t, err)
+	if got.URL != "https://pve.lan:8006" || got.SecretSealed != "v1:abc" || got.Insecure || got.Fingerprint != "AA" || !got.LastSync.IsZero() {
+		t.Fatalf("GetConnection = %+v", got)
+	}
+	must(t, s.SetConnectionSync(ctx, c.ID, now, "boom"))
+	got, _ = s.GetConnection(ctx, c.ID)
+	if !got.LastSync.Equal(now) || got.LastError != "boom" {
+		t.Fatalf("sync status = %+v", got)
+	}
+	isErr(t, s.SetConnectionSync(ctx, 9999, now, ""), store.ErrNotFound)
+	list, err := s.ListConnections(ctx)
+	must(t, err)
+	if len(list) != 2 || list[0].Name != "casa" || !list[1].Insecure {
+		t.Fatalf("ListConnections = %+v", list)
+	}
+
+	// First sync: everything is new.
+	found := []store.Guest{
+		{VMID: 100, Kind: "qemu", Name: "haos", Node: "pve1", Status: "running", IP: "10.0.0.10"},
+		{VMID: 103, Kind: "lxc", Name: "docker", Node: "pve1", Status: "running", IP: "10.0.0.23"},
+		{VMID: 104, Kind: "lxc", Name: "old", Node: "pve1", Status: "stopped"},
+	}
+	added, err := s.SyncGuests(ctx, c.ID, found, now)
+	must(t, err)
+	if added != 3 {
+		t.Fatalf("added = %d", added)
+	}
+	_, err = s.SyncGuests(ctx, 9999, found, now)
+	isErr(t, err, store.ErrNotFound)
+	guests, err := s.ListGuests(ctx)
+	must(t, err)
+	if len(guests) != 3 || guests[0].VMID != 100 || guests[0].State != store.GuestNew || guests[0].Missing ||
+		!guests[0].FirstSeen.Equal(now) || guests[1].IP != "10.0.0.23" {
+		t.Fatalf("ListGuests = %+v", guests)
+	}
+
+	// Decisions: approve 103 (needs a real service), ignore 104.
+	svc := &store.Service{Name: "docker", InternalURL: "http://10.0.0.23"}
+	must(t, s.SaveService(ctx, svc))
+	isErr(t, s.SetGuestState(ctx, guests[1].ID, store.GuestApproved, 9999), store.ErrNotFound)
+	isErr(t, s.SetGuestState(ctx, guests[1].ID, store.GuestApproved, 0), store.ErrNotFound)
+	isErr(t, s.SetGuestState(ctx, 9999, store.GuestIgnored, 0), store.ErrNotFound)
+	must(t, s.SetGuestState(ctx, guests[1].ID, store.GuestApproved, svc.ID))
+	must(t, s.SetGuestState(ctx, guests[2].ID, store.GuestIgnored, svc.ID)) // serviceID is dropped
+	g103, _ := s.GetGuest(ctx, guests[1].ID)
+	g104, _ := s.GetGuest(ctx, guests[2].ID)
+	if g103.State != store.GuestApproved || g103.ServiceID != svc.ID || g104.State != store.GuestIgnored || g104.ServiceID != 0 {
+		t.Fatalf("decisions: %+v %+v", g103, g104)
+	}
+
+	// Second sync: refreshed data keeps decisions; 100 vanished; 200 is new.
+	later := now.Add(time.Hour)
+	_, err = s.SyncGuests(ctx, other.ID, nil, later) // another connection is untouched
+	must(t, err)
+	added, err = s.SyncGuests(ctx, c.ID, []store.Guest{
+		{VMID: 103, Kind: "lxc", Name: "docker2", Node: "pve2", Status: "stopped", IP: ""},
+		{VMID: 104, Kind: "lxc", Name: "old", Node: "pve1", Status: "stopped"},
+		{VMID: 104, Kind: "lxc", Name: "old", Node: "pve1", Status: "stopped"}, // duplicate in one result
+		{VMID: 200, Kind: "qemu", Name: "new", Node: "pve1", Status: "running"},
+	}, later)
+	must(t, err)
+	if added != 1 {
+		t.Fatalf("added = %d", added)
+	}
+	g103, _ = s.GetGuest(ctx, g103.ID)
+	if g103.Name != "docker2" || g103.Node != "pve2" || g103.Status != "stopped" || g103.IP != "" ||
+		g103.State != store.GuestApproved || g103.ServiceID != svc.ID || g103.Missing || !g103.LastSeen.Equal(later) || !g103.FirstSeen.Equal(now) {
+		t.Fatalf("refreshed guest = %+v", g103)
+	}
+	g100, _ := s.GetGuest(ctx, guests[0].ID)
+	if !g100.Missing || g100.State != store.GuestNew {
+		t.Fatalf("vanished guest = %+v", g100)
+	}
+	if all, _ := s.ListGuests(ctx); len(all) != 4 {
+		t.Fatalf("guest count = %d", len(all))
+	}
+
+	// A guest that comes back is no longer missing.
+	_, err = s.SyncGuests(ctx, c.ID, []store.Guest{{VMID: 100, Kind: "qemu", Name: "haos", Node: "pve1", Status: "running"}}, later)
+	must(t, err)
+	g100, _ = s.GetGuest(ctx, g100.ID)
+	if g100.Missing {
+		t.Fatal("returning guest still missing")
+	}
+
+	// Deleting the service sends its guest back to "new".
+	must(t, s.DeleteService(ctx, svc.ID))
+	g103, _ = s.GetGuest(ctx, g103.ID)
+	if g103.State != store.GuestNew || g103.ServiceID != 0 {
+		t.Fatalf("guest after service delete = %+v", g103)
+	}
+	isErr(t, s.DeleteService(ctx, svc.ID), store.ErrNotFound)
+
+	must(t, s.DeleteGuest(ctx, g103.ID))
+	isErr(t, s.DeleteGuest(ctx, g103.ID), store.ErrNotFound)
+
+	// Deleting a connection removes its guests but never its services.
+	keep := &store.Service{Name: "kept", InternalURL: "http://x.lan"}
+	must(t, s.SaveService(ctx, keep))
+	g200, _ := s.ListGuests(ctx)
+	must(t, s.SetGuestState(ctx, g200[len(g200)-1].ID, store.GuestApproved, keep.ID))
+	must(t, s.DeleteConnection(ctx, c.ID))
+	isErr(t, s.DeleteConnection(ctx, c.ID), store.ErrNotFound)
+	if all, _ := s.ListGuests(ctx); len(all) != 0 {
+		t.Fatalf("guests survived their connection: %+v", all)
+	}
+	if _, err := s.GetService(ctx, keep.ID); err != nil {
+		t.Fatalf("service lost with connection: %v", err)
+	}
+	_, err = s.GetConnection(ctx, c.ID)
 	isErr(t, err, store.ErrNotFound)
 }

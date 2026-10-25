@@ -27,6 +27,7 @@ import (
 	"github.com/andregoncalvespires/homeview-dash/internal/auth"
 	"github.com/andregoncalvespires/homeview-dash/internal/cli"
 	"github.com/andregoncalvespires/homeview-dash/internal/config"
+	"github.com/andregoncalvespires/homeview-dash/internal/discovery"
 	"github.com/andregoncalvespires/homeview-dash/internal/store"
 	"github.com/andregoncalvespires/homeview-dash/internal/store/sqlstore"
 	"github.com/andregoncalvespires/homeview-dash/internal/web"
@@ -131,6 +132,9 @@ func serve(stderr io.Writer, getenv func(string) string) int {
 		log.Error("cannot build server", "err", err)
 		return 1
 	}
+	disc := discovery.New(st, secret, log)
+	srv.SetDiscovery(disc)
+	go disc.Run(ctx, cfg.DiscoveryInterval)
 
 	if n, err := st.CountAdmins(ctx); err == nil && n == 0 {
 		log.Warn("no administrator yet; create one with: docker compose exec -it <service> homeview admin create")

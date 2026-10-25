@@ -1,0 +1,65 @@
+{{define "content"}}
+<h1>{{t .Lang "admin.conn.title"}}</h1>
+<p class="muted">{{t .Lang "admin.conn.intro"}}</p>
+<section class="panel">
+  <h2>{{if .Data.Edit.ID}}{{t .Lang "admin.conn.edit"}}{{else}}{{t .Lang "admin.conn.new"}}{{end}}</h2>
+  {{if .Data.Detail}}<p class="flash err" role="alert">{{.Data.Detail}}</p>{{end}}
+  <form method="post" action="/admin/connections/save" class="form grid2" autocomplete="off">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="id" value="{{.Data.Edit.ID}}">
+    <label>{{t .Lang "f.name"}}<input name="name" value="{{.Data.Edit.Name}}" required maxlength="60" placeholder="Casa"></label>
+    <label>{{t .Lang "f.pve_url"}}<input name="url" value="{{.Data.Edit.URL}}" required maxlength="200" placeholder="https://192.168.1.2:8006"></label>
+    <label>{{t .Lang "f.token_id"}}<input name="token_id" value="{{.Data.Edit.TokenID}}" required maxlength="120" placeholder="homeview@pve!dashboard"></label>
+    <label>{{t .Lang "f.token_secret"}}<input type="password" name="secret" {{if not .Data.Edit.ID}}required{{end}} maxlength="200" autocomplete="new-password" placeholder="{{if .Data.Edit.ID}}{{t .Lang "f.token_secret.keep"}}{{end}}"></label>
+    <label>{{t .Lang "f.fingerprint"}}<input name="fingerprint" value="{{.Data.Edit.Fingerprint}}" maxlength="120" placeholder="AA:BB:CC:…"><small class="muted">{{t .Lang "f.fingerprint.help"}}</small></label>
+    <label class="check"><span><input type="checkbox" name="insecure" value="1"{{if .Data.Edit.Insecure}} checked{{end}}> {{t .Lang "f.insecure"}}</span><small class="muted">{{t .Lang "f.insecure.help"}}</small></label>
+    <div class="actions">
+      <button class="btn primary" type="submit">{{t .Lang "admin.conn.test_save"}}</button>
+      {{if .Data.Edit.ID}}<a class="btn" href="/admin/connections">{{t .Lang "f.cancel"}}</a>{{end}}
+    </div>
+  </form>
+</section>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>{{t .Lang "f.name"}}</th><th>{{t .Lang "f.pve_url"}}</th><th>{{t .Lang "conn.status"}}</th><th></th></tr></thead>
+  <tbody>
+  {{range .Data.Rows}}
+  <tr>
+    <td>{{.Name}}</td>
+    <td class="url">{{.URL}}</td>
+    <td>
+      {{if .LastError}}<span class="state bad">{{t $.Lang "conn.error"}}</span> <small class="muted">{{.LastError}}</small>
+      {{else if .LastSync.IsZero}}<span class="muted">{{t $.Lang "conn.never"}}</span>
+      {{else}}<span class="state ok">{{t $.Lang "conn.ok"}}</span> <small class="muted">{{dt $.Lang .LastSync}} · {{.Guests}} {{t $.Lang "conn.guests"}}{{if .New}} · {{.New}} {{t $.Lang "conn.new"}}{{end}}</small>{{end}}
+    </td>
+    <td class="right nowrap">
+      <form method="post" action="/admin/discovery/sync" class="inline">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+        <button class="btn small" type="submit">{{t $.Lang "disc.sync"}}</button>
+      </form>
+      <a class="btn small" href="/admin/connections?edit={{.ID}}">{{t $.Lang "f.edit"}}</a>
+      <form method="post" action="/admin/connections/delete" class="inline" data-confirm="{{t $.Lang "conn.confirm_delete"}}">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+        <button class="btn small danger" type="submit">{{t $.Lang "f.delete"}}</button>
+      </form>
+    </td>
+  </tr>
+  {{else}}
+  <tr><td colspan="4" class="muted">{{t $.Lang "admin.conn.none"}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+
+<section class="panel help">
+  <h2>{{t .Lang "admin.conn.help.title"}}</h2>
+  <ol>
+    <li>{{t .Lang "admin.conn.help.1"}}</li>
+    <li>{{t .Lang "admin.conn.help.2"}}</li>
+    <li>{{t .Lang "admin.conn.help.3"}}</li>
+    <li>{{t .Lang "admin.conn.help.4"}}</li>
+  </ol>
+  <p class="muted">{{t .Lang "admin.conn.help.note"}}</p>
+</section>
+{{end}}

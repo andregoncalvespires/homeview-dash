@@ -81,6 +81,52 @@ type Service struct {
 	Position    int
 }
 
+// Connection is a discovery source: one Proxmox server or cluster. The API
+// token secret is kept encrypted (see package secretbox); the store never sees
+// the plaintext.
+type Connection struct {
+	ID           int64
+	Name         string
+	URL          string
+	TokenID      string
+	SecretSealed string
+	Insecure     bool   // skip TLS verification
+	Fingerprint  string // pinned SHA-256 certificate fingerprint, "" if unused
+	LastSync     time.Time
+	LastError    string // "" when the last sync worked
+}
+
+// GuestState is where a discovered VM/container is in the approval flow.
+type GuestState string
+
+const (
+	GuestNew      GuestState = "new"      // found, waiting for an admin decision
+	GuestApproved GuestState = "approved" // became a Service
+	GuestIgnored  GuestState = "ignored"  // admin does not want it on the dashboard
+)
+
+// Valid reports whether g is a known state.
+func (g GuestState) Valid() bool {
+	return g == GuestNew || g == GuestApproved || g == GuestIgnored
+}
+
+// Guest is a VM or container found through a Connection.
+type Guest struct {
+	ID        int64
+	ConnID    int64
+	VMID      int
+	Kind      string // "lxc" or "qemu"
+	Name      string
+	Node      string
+	Status    string // running, stopped, ...
+	IP        string // best effort, may be empty
+	State     GuestState
+	Missing   bool  // not returned by the last successful sync
+	ServiceID int64 // set when State == GuestApproved
+	FirstSeen time.Time
+	LastSeen  time.Time
+}
+
 // Store is the persistence interface used by the rest of the application.
 type Store interface {
 	Close() error
@@ -125,7 +171,29 @@ type Store interface {
 	ListServices(ctx context.Context) ([]Service, error)
 	GetService(ctx context.Context, id int64) (*Service, error)
 	SaveService(ctx context.Context, s *Service) error // insert when ID == 0
+	// DeleteService also sends the guest that produced it back to GuestNew.
 	DeleteService(ctx context.Context, id int64) error
+
+	// Discovery connections.
+	ListConnections(ctx context.Context) ([]Connection, error)
+	GetConnection(ctx context.Context, id int64) (*Connection, error)
+	SaveConnection(ctx context.Context, c *Connection) error // insert when ID == 0; ErrExists on duplicate name
+	DeleteConnection(ctx context.Context, id int64) error    // also removes its guests (services stay)
+	// SetConnectionSync records the outcome of a sync attempt.
+	SetConnectionSync(ctx context.Context, id int64, at time.Time, errMsg string) error
+
+	// Discovered guests.
+	ListGuests(ctx context.Context) ([]Guest, error) // ordered by connection, node, vmid
+	GetGuest(ctx context.Context, id int64) (*Guest, error)
+	// SyncGuests merges a successful discovery result: unknown guests are added
+	// as GuestNew, known ones are refreshed (decisions are kept), and guests of
+	// the connection that were not returned are flagged Missing. It returns how
+	// many guests were new.
+	SyncGuests(ctx context.Context, connID int64, found []Guest, now time.Time) (added int, err error)
+	// SetGuestState changes the decision. serviceID is required (and must
+	// exist) for GuestApproved and is cleared otherwise.
+	SetGuestState(ctx context.Context, id int64, state GuestState, serviceID int64) error
+	DeleteGuest(ctx context.Context, id int64) error
 }
 
 // NormalizeEmail trims and lower-cases an address.

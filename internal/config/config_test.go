@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func env(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
@@ -67,6 +68,29 @@ func TestInvalidValues(t *testing.T) {
 	for _, m := range bad {
 		if _, err := FromEnv(env(m)); err == nil {
 			t.Errorf("accepted %v", m)
+		}
+	}
+}
+
+func TestDiscoveryInterval(t *testing.T) {
+	get := func(v string) (Config, error) {
+		return FromEnv(func(k string) string {
+			if k == "HOMEVIEW_DISCOVERY_INTERVAL" {
+				return v
+			}
+			return ""
+		})
+	}
+	cases := map[string]time.Duration{"": 10 * time.Minute, "30m": 30 * time.Minute, "1h": time.Hour, "0": 0, "off": 0}
+	for in, want := range cases {
+		c, err := get(in)
+		if err != nil || c.DiscoveryInterval != want {
+			t.Errorf("%q: got %v, %v; want %v", in, c.DiscoveryInterval, err, want)
+		}
+	}
+	for _, in := range []string{"10", "5s", "abc", "-1m"} {
+		if _, err := get(in); err == nil {
+			t.Errorf("%q accepted", in)
 		}
 	}
 }
