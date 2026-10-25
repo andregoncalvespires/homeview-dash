@@ -74,6 +74,12 @@ func testUsers(t *testing.T, s store.Store) {
 		t.Fatalf("UserByID = %+v", byID)
 	}
 
+	must(t, s.UpdateUserName(ctx, u.ID, "Ann Maria"))
+	isErr(t, s.UpdateUserName(ctx, 9999, "x"), store.ErrNotFound)
+	if renamed, err := s.UserByID(ctx, u.ID); err != nil || renamed.Name != "Ann Maria" {
+		t.Fatalf("UpdateUserName: %+v %v", renamed, err)
+	}
+
 	list, err := s.ListUsers(ctx)
 	must(t, err)
 	if len(list) != 2 || list[0].Email != "a@example.com" {

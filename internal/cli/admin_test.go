@@ -90,3 +90,55 @@ func TestListAndUsage(t *testing.T) {
 		t.Fatal("unknown subcommand should exit 2")
 	}
 }
+
+func TestCreateRejectsBrokenEncoding(t *testing.T) {
+	st := store.NewMemStore()
+	// What a terminal without UTF-8 line editing produces: a lone 0xC3 left
+	// over from a backspace on "é", followed by the retyped letters.
+	code, _, e := run(t, st, "pt-BR", "ana@example.com\nAndr\xc3e Pires\n", "create")
+	if code != 1 || !strings.Contains(e, "UTF-8") {
+		t.Fatalf("broken name accepted or unexplained: %d %q", code, e)
+	}
+	if users, _ := st.ListUsers(context.Background()); len(users) != 0 {
+		t.Fatalf("user stored with invalid name: %+v", users)
+	}
+	// Properly encoded accents are fine.
+	if code, _, _ := run(t, st, "pt-BR", "ana@example.com\nAndré Pires\n", "create"); code != 0 {
+		t.Fatal("valid accented name rejected")
+	}
+	if u, _ := st.UserByEmail(context.Background(), "ana@example.com"); u == nil || u.Name != "André Pires" {
+		t.Fatalf("stored: %+v", u)
+	}
+}
+
+func TestRename(t *testing.T) {
+	st := store.NewMemStore()
+	ctx := context.Background()
+	// Simulate a user created by an older version with a corrupted name.
+	if _, err := st.CreateUser(ctx, "ana@example.com", "Andr\xc3e Pires", store.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, _ := run(t, st, "pt-BR", "", "rename", "--email", "Ana@Example.com", "--name", "André Pires"); code != 0 || !strings.Contains(out, "André Pires") {
+		t.Fatalf("rename: %d %q", code, out)
+	}
+	if u, _ := st.UserByEmail(ctx, "ana@example.com"); u.Name != "André Pires" {
+		t.Fatalf("name = %q", u.Name)
+	}
+	// Interactive form.
+	if code, _, _ := run(t, st, "en", "Jane Doe\n", "rename", "--email", "ana@example.com"); code != 0 {
+		t.Fatal("interactive rename failed")
+	}
+	if u, _ := st.UserByEmail(ctx, "ana@example.com"); u.Name != "Jane Doe" {
+		t.Fatalf("name = %q", u.Name)
+	}
+	// Errors.
+	if code, _, e := run(t, st, "en", "", "rename", "--email", "ghost@example.com", "--name", "X"); code != 1 || !strings.Contains(e, "not found") {
+		t.Fatalf("unknown user: %d %q", code, e)
+	}
+	if code, _, _ := run(t, st, "en", "", "rename", "--email", "ana@example.com", "--name", "Bad\xc3"); code != 1 {
+		t.Fatal("invalid name accepted")
+	}
+	if u, _ := st.UserByEmail(ctx, "ana@example.com"); u.Name != "Jane Doe" {
+		t.Fatalf("failed rename changed the name: %q", u.Name)
+	}
+}

@@ -6,7 +6,6 @@ import (
 	"net/mail"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/andregoncalvespires/homeview-dash/internal/store"
 )
@@ -79,16 +78,17 @@ func (s *Server) getAdminServices(w http.ResponseWriter, r *http.Request, sess *
 
 // validateService normalises fields and returns an i18n error key ("" = valid).
 func validateService(v *store.Service) string {
-	v.Name = strings.TrimSpace(v.Name)
-	v.Description = strings.TrimSpace(v.Description)
+	var ok bool
+	if v.Name, ok = store.CleanText(v.Name, 80); !ok || v.Name == "" {
+		return "err.name"
+	}
+	if v.Description, ok = store.CleanText(v.Description, 200); !ok {
+		return "err.description"
+	}
 	v.Icon = strings.TrimSpace(v.Icon)
 	v.InternalURL = strings.TrimSpace(v.InternalURL)
 	v.ExternalURL = strings.TrimSpace(v.ExternalURL)
 	switch {
-	case v.Name == "" || utf8.RuneCountInString(v.Name) > 80:
-		return "err.name"
-	case utf8.RuneCountInString(v.Description) > 200:
-		return "err.description"
 	case v.InternalURL == "" && v.ExternalURL == "":
 		return "err.url_required"
 	case v.InternalURL != "" && !validHTTPURL(v.InternalURL),
@@ -168,8 +168,9 @@ func (s *Server) getAdminGroups(w http.ResponseWriter, r *http.Request, sess *se
 }
 
 func (s *Server) saveGroup(w http.ResponseWriter, r *http.Request, sess *session) {
-	g := store.Group{Name: strings.TrimSpace(r.PostFormValue("name")), Position: formInt(r, "position")}
-	if g.Name == "" || utf8.RuneCountInString(g.Name) > 80 {
+	name, ok := store.CleanText(r.PostFormValue("name"), 80)
+	g := store.Group{Name: name, Position: formInt(r, "position")}
+	if !ok || g.Name == "" {
 		http.Redirect(w, r, "/admin/groups?err=err.name", http.StatusSeeOther)
 		return
 	}
@@ -211,13 +212,13 @@ func (s *Server) getAdminUsers(w http.ResponseWriter, r *http.Request, sess *ses
 
 func (s *Server) addUser(w http.ResponseWriter, r *http.Request, sess *session) {
 	email := store.NormalizeEmail(r.PostFormValue("email"))
-	name := strings.TrimSpace(r.PostFormValue("name"))
+	name, nameOK := store.CleanText(r.PostFormValue("name"), 80)
 	role := store.Role(r.PostFormValue("role"))
 	if a, err := mail.ParseAddress(email); err != nil || a.Address != email || len(email) > 254 {
 		http.Redirect(w, r, "/admin/users?err=err.email", http.StatusSeeOther)
 		return
 	}
-	if name == "" || utf8.RuneCountInString(name) > 80 || !role.Valid() {
+	if !nameOK || name == "" || !role.Valid() {
 		http.Redirect(w, r, "/admin/users?err=err.name", http.StatusSeeOther)
 		return
 	}

@@ -9,6 +9,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 var (
@@ -92,6 +94,7 @@ type Store interface {
 	UserByEmail(ctx context.Context, email string) (*User, error)
 	UserByID(ctx context.Context, id int64) (*User, error)
 	ListUsers(ctx context.Context) ([]User, error)
+	UpdateUserName(ctx context.Context, id int64, name string) error
 	DeleteUser(ctx context.Context, id int64) error
 	CountAdmins(ctx context.Context) (int, error)
 
@@ -128,4 +131,21 @@ type Store interface {
 // NormalizeEmail trims and lower-cases an address.
 func NormalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
+}
+
+// CleanText trims s and reports whether it is acceptable user-visible text:
+// valid UTF-8, no control characters, and at most max characters. Text that
+// fails the UTF-8 check usually comes from a terminal with the wrong encoding
+// (e.g. a backspace that erased only half of an accented letter).
+func CleanText(s string, max int) (string, bool) {
+	s = strings.TrimSpace(s)
+	if !utf8.ValidString(s) || utf8.RuneCountInString(s) > max {
+		return s, false
+	}
+	for _, r := range s {
+		if unicode.IsControl(r) || r == utf8.RuneError {
+			return s, false
+		}
+	}
+	return s, true
 }

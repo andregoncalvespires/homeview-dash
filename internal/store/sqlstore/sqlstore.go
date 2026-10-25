@@ -193,6 +193,10 @@ func (s *Store) ListUsers(ctx context.Context) ([]store.User, error) {
 	return out, rows.Err()
 }
 
+func (s *Store) UpdateUserName(ctx context.Context, id int64, name string) error {
+	return affected(s.db.ExecContext(ctx, `UPDATE users SET name = ? WHERE id = ?`, name, id))
+}
+
 func (s *Store) DeleteUser(ctx context.Context, id int64) error {
 	return affected(s.db.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id))
 }

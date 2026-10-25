@@ -113,6 +113,17 @@ func (m *MemStore) ListUsers(_ context.Context) ([]User, error) {
 	return out, nil
 }
 
+func (m *MemStore) UpdateUserName(_ context.Context, id int64, name string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u, ok := m.users[id]
+	if !ok {
+		return ErrNotFound
+	}
+	u.Name = name
+	return nil
+}
+
 func (m *MemStore) DeleteUser(_ context.Context, id int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

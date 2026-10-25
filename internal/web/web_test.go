@@ -714,3 +714,50 @@ func TestAllPagesRender(t *testing.T) {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+func TestBrokenEncodingIsRejected(t *testing.T) {
+	e := newEnv(t)
+	admin := e.login("admin@example.com")
+	tok := e.csrf(admin)
+	broken := "Andr\xc3e Pires" // percent-encoded by url.Values, arrives as invalid UTF-8
+
+	r, _ := e.post(admin, "/admin/users/add", url.Values{"csrf": {tok}, "email": {"bob@example.com"}, "name": {broken}, "role": {"user"}})
+	if !strings.Contains(r.Header.Get("Location"), "err.name") {
+		t.Errorf("user with broken name: %q", r.Header.Get("Location"))
+	}
+	r, _ = e.post(admin, "/admin/groups/save", url.Values{"csrf": {tok}, "name": {broken}})
+	if !strings.Contains(r.Header.Get("Location"), "err.name") {
+		t.Errorf("group with broken name: %q", r.Header.Get("Location"))
+	}
+	for _, v := range []url.Values{
+		{"name": {broken}, "internal_url": {"http://a.example.com"}},
+		{"name": {"ok"}, "description": {"x\xc3"}, "internal_url": {"http://a.example.com"}},
+		{"name": {"ok"}, "internal_url": {"http://a.example.com/\xc3"}},
+		{"name": {"ok"}, "internal_url": {"http://a.example.com"}, "icon": {"\xc3"}},
+		{"name": {"line\nbreak"}, "internal_url": {"http://a.example.com"}},
+	} {
+		v.Set("csrf", tok)
+		if r, _ := e.post(admin, "/admin/services/save", v); r.StatusCode != 400 {
+			t.Errorf("accepted %q (%d)", v, r.StatusCode)
+		}
+	}
+	if us, _ := e.st.ListUsers(context.Background()); len(us) != 2 {
+		t.Errorf("users: %+v", us)
+	}
+	if g, _ := e.st.ListGroups(context.Background()); len(g) != 0 {
+		t.Errorf("groups: %+v", g)
+	}
+	if l, _ := e.st.ListServices(context.Background()); len(l) != 0 {
+		t.Errorf("services: %+v", l)
+	}
+
+	// Correctly encoded accents are stored and shown intact.
+	e.post(admin, "/admin/users/add", url.Values{"csrf": {tok}, "email": {"bob@example.com"}, "name": {"André Pires"}, "role": {"user"}})
+	bob := e.login("bob@example.com")
+	if _, b := e.get(bob, "/"); !strings.Contains(b, "André Pires") || strings.Contains(b, "�") {
+		t.Errorf("accented name not rendered intact:\n%s", b)
+	}
+	if r, _ := e.get(bob, "/"); !strings.Contains(r.Header.Get("Content-Type"), "charset=utf-8") {
+		t.Errorf("content type: %q", r.Header.Get("Content-Type"))
+	}
+}

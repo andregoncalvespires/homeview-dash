@@ -72,7 +72,7 @@ var cgnat = netip.MustParsePrefix("100.64.0.0/10") // Tailscale and carrier-grad
 
 // validHTTPURL accepts only absolute http(s) URLs with a host.
 func validHTTPURL(raw string) bool {
-	if len(raw) > 2048 || strings.ContainsAny(raw, " \t\r\n") {
+	if len(raw) > 2048 || !utf8.ValidString(raw) || strings.ContainsAny(raw, " \t\r\n") {
 		return false
 	}
 	u, err := url.Parse(raw)
@@ -83,6 +83,9 @@ func validHTTPURL(raw string) bool {
 func validIcon(icon string) bool {
 	if icon == "" {
 		return true
+	}
+	if !utf8.ValidString(icon) {
+		return false
 	}
 	low := strings.ToLower(icon)
 	if strings.HasPrefix(low, "http://") || strings.HasPrefix(low, "https://") {

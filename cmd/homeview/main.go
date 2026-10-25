@@ -2,6 +2,7 @@
 //
 //	homeview                     start the web server (default)
 //	homeview admin create        create the first administrator
+//	homeview admin rename        change a user's name
 //	homeview admin login-link    print a one-time sign-in link (recovery)
 //	homeview admin list          list users
 //	homeview healthcheck         exit 0 if the server answers (for Docker)
@@ -39,6 +40,7 @@ const usage = `HomeView ` + "%s" + `
 Usage:
   homeview                      start the web server
   homeview admin create         create the first administrator (interactive)
+  homeview admin rename         change a user's name
   homeview admin login-link     print a one-time sign-in link
   homeview admin list           list users
   homeview healthcheck          check the running server

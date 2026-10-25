@@ -116,6 +116,9 @@ HomeView **refuses** to send credentials over an unencrypted connection.
   ```
 
 - **List users**: `docker compose exec homeview homeview admin list`.
+- **Fix a user's name** (for example, accents stored wrongly):
+  `docker compose exec homeview homeview admin rename --email you@example.com --name "André Pires"`.
+  Tip: if your terminal is not UTF-8, typing accents at the interactive prompt can corrupt the text; pass the name with `--name` (also accepted by `admin create`) or switch the terminal to UTF-8. HomeView rejects names with invalid encoding.
 - **Backup**: all data is in the `homeview-data` volume (`homeview.db`). For example:
 
   ```bash

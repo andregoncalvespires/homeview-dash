@@ -39,8 +39,8 @@ func Admin(ctx context.Context, args []string, st store.Store, cfg config.Config
 	}
 	if len(args) == 0 {
 		fmt.Fprintln(io.Err, tr(
-			"uso: homeview admin <create|login-link|list>",
-			"usage: homeview admin <create|login-link|list>"))
+			"uso: homeview admin <create|rename|login-link|list>",
+			"usage: homeview admin <create|rename|login-link|list>"))
 		return 2
 	}
 	cmd, rest := args[0], args[1:]
@@ -56,6 +56,8 @@ func Admin(ctx context.Context, args []string, st store.Store, cfg config.Config
 	switch cmd {
 	case "create":
 		return create(ctx, st, cfg, io, tr, *email, *name)
+	case "rename":
+		return rename(ctx, st, io, tr, *email, *name)
 	case "login-link":
 		return loginLink(ctx, st, cfg, io, tr, *email)
 	case "list":
@@ -84,9 +86,8 @@ func create(ctx context.Context, st store.Store, cfg config.Config, io IO, tr fu
 	if name == "" {
 		name = prompt(io, tr("Nome: ", "Name: "))
 	}
-	name = strings.TrimSpace(name)
-	if name == "" || utf8.RuneCountInString(name) > 80 {
-		fmt.Fprintln(io.Err, tr("Nome inválido (1 a 80 caracteres).", "Invalid name (1 to 80 characters)."))
+	name, ok := validName(io, tr, name)
+	if !ok {
 		return 1
 	}
 	if _, err := st.CreateUser(ctx, email, name, store.RoleAdmin); err != nil {
@@ -101,6 +102,50 @@ func create(ctx context.Context, st store.Store, cfg config.Config, io IO, tr fu
 		"Administrador %s criado.\nAbra %s/login e entre com esse e-mail (o código chega por e-mail).\n",
 		"Administrator %s created.\nOpen %s/login and sign in with that e-mail (the code arrives by e-mail).\n"),
 		email, cfg.BaseURL)
+	return 0
+}
+
+// validName checks a name typed in the terminal and explains encoding problems.
+func validName(io IO, tr func(p, e string) string, name string) (string, bool) {
+	clean, ok := store.CleanText(name, 80)
+	if ok && clean != "" {
+		return clean, true
+	}
+	if !utf8.ValidString(name) {
+		fmt.Fprintln(io.Err, tr(
+			"Nome com caracteres inválidos: o terminal não está enviando UTF-8 (acontece ao usar backspace sobre letras acentuadas). Digite de novo sem corrigir, ou use --name \"André Pires\".",
+			"Name has invalid characters: the terminal is not sending UTF-8 (this happens when backspacing over accented letters). Retype it without editing, or use --name \"Jane Doe\"."))
+		return "", false
+	}
+	fmt.Fprintln(io.Err, tr("Nome inválido (1 a 80 caracteres, sem caracteres de controle).", "Invalid name (1 to 80 characters, no control characters)."))
+	return "", false
+}
+
+func rename(ctx context.Context, st store.Store, io IO, tr func(p, e string) string, email, name string) int {
+	if email == "" {
+		email = prompt(io, tr("E-mail do usuário: ", "User e-mail: "))
+	}
+	u, err := st.UserByEmail(ctx, store.NormalizeEmail(email))
+	if errors.Is(err, store.ErrNotFound) {
+		fmt.Fprintln(io.Err, tr("Usuário não encontrado.", "User not found."))
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintln(io.Err, "error:", err)
+		return 1
+	}
+	if name == "" {
+		name = prompt(io, tr("Novo nome: ", "New name: "))
+	}
+	name, ok := validName(io, tr, name)
+	if !ok {
+		return 1
+	}
+	if err := st.UpdateUserName(ctx, u.ID, name); err != nil {
+		fmt.Fprintln(io.Err, "error:", err)
+		return 1
+	}
+	fmt.Fprintf(io.Out, tr("Nome de %s atualizado para %q.\n", "Name of %s updated to %q.\n"), u.Email, name)
 	return 0
 }
 
