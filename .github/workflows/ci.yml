@@ -20,6 +20,9 @@ jobs:
           go-version: "1.24"
           cache: false
 
+      - name: Go version
+        run: go version
+
       - name: Resolve dependencies
         run: |
           if [ -f go.sum ]; then echo "HAD_SUM=true" >> "$GITHUB_ENV"; fi

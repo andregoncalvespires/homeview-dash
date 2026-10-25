@@ -99,6 +99,16 @@ func (e *env) get(c *http.Client, path string, hdr ...string) (*http.Response, s
 			req.Header.Set(hdr[i], hdr[i+1])
 		}
 	}
+	if req.Host != "" && req.Host != req.URL.Host {
+		// Cookie jars may key cookies by the request's Host header instead of the
+		// URL, which would hide them when we fake a different Host. Send them
+		// explicitly with a jar-less client so the test is independent of that.
+		u, _ := url.Parse(e.srv.URL)
+		for _, ck := range c.Jar.Cookies(u) {
+			req.AddCookie(ck)
+		}
+		c = &http.Client{CheckRedirect: c.CheckRedirect}
+	}
 	r, err := c.Do(req)
 	if err != nil {
 		e.t.Fatal(err)
