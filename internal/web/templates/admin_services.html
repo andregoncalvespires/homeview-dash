@@ -2,15 +2,22 @@
 <h1>{{t .Lang "admin.services.title"}}</h1>
 <section class="panel">
   <h2>{{if .Data.Edit.ID}}{{t .Lang "admin.services.edit"}}{{else}}{{t .Lang "admin.services.new"}}{{end}}</h2>
-  <form method="post" action="/admin/services/save" class="form grid2">
+  <form method="post" action="/admin/services/save" class="form grid2" data-appform>
     <input type="hidden" name="csrf" value="{{.CSRF}}">
     <input type="hidden" name="id" value="{{.Data.Edit.ID}}">
     <label>{{t .Lang "f.app"}}
-      <select id="app-model" data-port-prefix="{{t .Lang "app.port"}}">
+      <select class="app-model" data-port-prefix="{{t .Lang "app.port"}}">
         <option value="">{{t .Lang "f.app.none"}}</option>
         {{range .Data.Apps}}<option value="{{.ID}}" data-name="{{.Name}}" data-web="{{if .Web}}1{{end}}" data-scheme="{{.Scheme}}" data-port="{{.Port}}" data-path="{{.Path}}" data-portlabel="{{.PortLabel}}"{{if eq $.Data.Edit.Icon .IconRef}} selected{{end}}>{{.Name}}</option>{{end}}
       </select>
-      <small id="app-hint" class="muted">{{t .Lang "f.app.help"}}</small>
+      <small class="app-hint muted">{{t .Lang "f.app.help"}}</small>
+    </label>
+    <label>{{t .Lang "f.origin"}}
+      <select name="origin" class="origin">
+        <option value="">{{t .Lang "f.origin.none"}}</option>
+        {{range .Data.Origins}}<option value="{{.Value}}" data-addr="{{.Addr}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}
+      </select>
+      <small class="muted">{{t .Lang "f.origin.help"}}</small>
     </label>
     <label>{{t .Lang "f.name"}}<input name="name" value="{{.Data.Edit.Name}}" required maxlength="80"></label>
     <label>{{t .Lang "f.group"}}

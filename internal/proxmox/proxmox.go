@@ -58,6 +58,12 @@ type Guest struct {
 	IP       string // best-effort IPv4, may be empty
 }
 
+// Node is one Proxmox host.
+type Node struct {
+	Name string
+	IP   string // as reported by the cluster, may be empty
+}
+
 // Client talks to one Proxmox server.
 type Client struct {
 	base string
@@ -306,4 +312,39 @@ func PickIP(cands []candidate) string {
 		}
 	}
 	return best
+}
+
+// Nodes lists the Proxmox hosts. The cluster status carries their IPs; on a
+// standalone server it may not, so the list falls back to names only. The
+// caller treats failure as "no host information", never as a sync failure.
+func (c *Client) Nodes(ctx context.Context) ([]Node, error) {
+	var st []struct {
+		Type string `json:"type"`
+		Name string `json:"name"`
+		IP   string `json:"ip"`
+	}
+	if err := c.get(ctx, "/cluster/status", &st); err == nil {
+		var out []Node
+		for _, n := range st {
+			if n.Type == "node" && n.Name != "" {
+				out = append(out, Node{Name: n.Name, IP: n.IP})
+			}
+		}
+		if len(out) > 0 {
+			return out, nil
+		}
+	}
+	var ns []struct {
+		Node string `json:"node"`
+	}
+	if err := c.get(ctx, "/nodes", &ns); err != nil {
+		return nil, err
+	}
+	var out []Node
+	for _, n := range ns {
+		if n.Node != "" {
+			out = append(out, Node{Name: n.Node})
+		}
+	}
+	return out, nil
 }

@@ -79,6 +79,15 @@ type Service struct {
 	ExternalURL string
 	GroupID     int64 // 0 means "no group"
 	Position    int
+	GuestID     int64 // discovered VM/container this service runs on, 0 if none (several services may share one)
+}
+
+// Node is a Proxmox host. Addr is its IP (or host name), used to point a
+// service at the Proxmox machine itself.
+type Node struct {
+	ConnID int64
+	Name   string
+	Addr   string
 }
 
 // Connection is a discovery source: one Proxmox server or cluster. The API
@@ -101,7 +110,7 @@ type GuestState string
 
 const (
 	GuestNew      GuestState = "new"      // found, waiting for an admin decision
-	GuestApproved GuestState = "approved" // became a Service
+	GuestApproved GuestState = "approved" // has at least one Service (derived, never written)
 	GuestIgnored  GuestState = "ignored"  // admin does not want it on the dashboard
 )
 
@@ -118,11 +127,11 @@ type Guest struct {
 	Kind      string // "lxc" or "qemu"
 	Name      string
 	Node      string
-	Status    string // running, stopped, ...
-	IP        string // best effort, may be empty
-	State     GuestState
-	Missing   bool  // not returned by the last successful sync
-	ServiceID int64 // set when State == GuestApproved
+	Status    string     // running, stopped, ...
+	IP        string     // best effort, may be empty
+	State     GuestState // GuestApproved is derived from Services > 0
+	Missing   bool       // not returned by the last successful sync
+	Services  int        // how many services run on this guest
 	FirstSeen time.Time
 	LastSeen  time.Time
 }
@@ -223,7 +232,8 @@ type Store interface {
 	ListServices(ctx context.Context) ([]Service, error)
 	GetService(ctx context.Context, id int64) (*Service, error)
 	SaveService(ctx context.Context, s *Service) error // insert when ID == 0
-	// DeleteService also sends the guest that produced it back to GuestNew.
+	// A guest with services is GuestApproved; deleting the last one makes it
+	// GuestNew again. Several services may share a guest (Service.GuestID).
 	DeleteService(ctx context.Context, id int64) error
 
 	// Per-user appearance. GetPrefs never fails for a missing row: it returns
@@ -255,9 +265,13 @@ type Store interface {
 	// the connection that were not returned are flagged Missing. It returns how
 	// many guests were new.
 	SyncGuests(ctx context.Context, connID int64, found []Guest, now time.Time) (added int, err error)
-	// SetGuestState changes the decision. serviceID is required (and must
-	// exist) for GuestApproved and is cleared otherwise.
-	SetGuestState(ctx context.Context, id int64, state GuestState, serviceID int64) error
+	// SetGuestState records an ignore (GuestIgnored) or undoes it (GuestNew).
+	// GuestApproved cannot be set: it follows from the guest having services.
+	SetGuestState(ctx context.Context, id int64, state GuestState) error
+	// SetNodes replaces the known Proxmox hosts of a connection;
+	// ListNodes returns all of them ordered by connection and name.
+	SetNodes(ctx context.Context, connID int64, nodes []Node) error
+	ListNodes(ctx context.Context) ([]Node, error)
 	DeleteGuest(ctx context.Context, id int64) error
 }
 

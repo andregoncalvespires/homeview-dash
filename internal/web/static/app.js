@@ -32,29 +32,57 @@
       }
     });
   }
-  // Service form: picking a known application fills the icon and the usual port.
-  var model = document.getElementById('app-model');
-  if (model) {
-    var field = function (n) { return document.querySelector('[name=' + n + ']'); };
+  // Service forms (new service, and "add to dashboard" per machine): picking an
+  // application fills the icon, name and usual port; picking where it runs
+  // fills the address. Only an empty or bare-host URL is ever rewritten.
+  Array.prototype.forEach.call(document.querySelectorAll('form[data-appform]'), function (form) {
+    var model = form.querySelector('.app-model');
+    var origin = form.querySelector('.origin');
+    var field = function (n) { return form.querySelector('[name=' + n + ']'); };
+    var url = field('internal_url');
+    if (!model || !url) return;
+    var addr = function () {
+      if (origin) {
+        var oo = origin.options[origin.selectedIndex];
+        return oo ? oo.getAttribute('data-addr') || '' : '';
+      }
+      return form.getAttribute('data-addr') || '';
+    };
+    var suggest = function () {
+      var o = model.options[model.selectedIndex];
+      var scheme = 'http', suffix = '';
+      if (o && o.value && o.getAttribute('data-web') === '1') {
+        scheme = o.getAttribute('data-scheme');
+        var port = o.getAttribute('data-port'), path = o.getAttribute('data-path');
+        var std = (scheme === 'http' && port === '80') || (scheme === 'https' && port === '443');
+        suffix = (std ? '' : ':' + port) + path;
+      }
+      var host = addr();
+      url.placeholder = scheme + '://' + (host || '192.168.1.10') + suffix;
+      var cur = url.value.trim();
+      var bare = /^https?:\/\/([^\/:?#]+)(:\d+)?\/?$/.exec(cur);
+      var last = url.getAttribute('data-auto');
+      if (!host && bare) host = bare[1]; // keep the host already typed
+      if (!host) return;
+      if (cur === '' || bare || cur === last) {
+        url.value = scheme + '://' + host + suffix;
+        url.setAttribute('data-auto', url.value);
+      }
+    };
     model.addEventListener('change', function () {
       var o = model.options[model.selectedIndex];
-      if (!o.value) return;
-      field('icon').value = 'app:' + o.value;
-      var name = field('name');
-      if (!name.value.trim()) name.value = o.getAttribute('data-name');
-      var hint = document.getElementById('app-hint');
-      var label = o.getAttribute('data-portlabel');
-      hint.textContent = label ? model.getAttribute('data-port-prefix') + ' ' + label : '';
-      if (o.getAttribute('data-web') !== '1') return;
-      var scheme = o.getAttribute('data-scheme'), port = o.getAttribute('data-port'), path = o.getAttribute('data-path');
-      var std = (scheme === 'http' && port === '80') || (scheme === 'https' && port === '443');
-      var suffix = (std ? '' : ':' + port) + path;
-      var url = field('internal_url');
-      url.placeholder = scheme + '://192.168.1.10' + suffix;
-      var m = /^https?:\/\/([^\/:?#]+)\/?$/.exec(url.value.trim());
-      if (m) url.value = scheme + '://' + m[1] + suffix; // only a bare host is completed
+      var hint = form.querySelector('.app-hint');
+      if (o.value) {
+        field('icon').value = 'app:' + o.value;
+        var name = field('name');
+        if (!name.value.trim()) name.value = o.getAttribute('data-name');
+        var label = o.getAttribute('data-portlabel');
+        if (hint) hint.textContent = label ? model.getAttribute('data-port-prefix') + ' ' + label : '';
+      }
+      suggest();
     });
-  }
+    if (origin) origin.addEventListener('change', suggest);
+  });
   // Appearance: show the fade percentage while dragging the slider.
   var dim = document.querySelector('input[name=bg_dim]');
   if (dim && dim.parentNode.querySelector('output')) {

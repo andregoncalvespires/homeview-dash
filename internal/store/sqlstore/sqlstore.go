@@ -28,10 +28,13 @@ var schemaV3 string
 //go:embed schema_v4.sql
 var schemaV4 string
 
+//go:embed schema_v5.sql
+var schemaV5 string
+
 const splitMarker = "-- +split"
 
 // migrations are applied in order; PRAGMA user_version records how many ran.
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4}
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5}
 
 // Store is the SQLite-backed store.
 type Store struct{ db *sql.DB }
@@ -410,18 +413,18 @@ func (s *Store) DeleteGroup(ctx context.Context, id int64) error {
 
 // ---- services ----
 
-const serviceCols = `id, name, description, icon, internal_url, external_url, group_id, position`
+const serviceCols = `id, name, description, icon, internal_url, external_url, group_id, position, guest_id`
 
 func scanService(r scanner) (*store.Service, error) {
 	var v store.Service
-	var gid sql.NullInt64
-	if err := r.Scan(&v.ID, &v.Name, &v.Description, &v.Icon, &v.InternalURL, &v.ExternalURL, &gid, &v.Position); err != nil {
+	var gid, guest sql.NullInt64
+	if err := r.Scan(&v.ID, &v.Name, &v.Description, &v.Icon, &v.InternalURL, &v.ExternalURL, &gid, &v.Position, &guest); err != nil {
 		if isNoRows(err) {
 			return nil, store.ErrNotFound
 		}
 		return nil, err
 	}
-	v.GroupID = gid.Int64
+	v.GroupID, v.GuestID = gid.Int64, guest.Int64
 	return &v, nil
 }
 
@@ -450,9 +453,9 @@ func (s *Store) GetService(ctx context.Context, id int64) (*store.Service, error
 func (s *Store) SaveService(ctx context.Context, v *store.Service) error {
 	if v.ID == 0 {
 		res, err := s.db.ExecContext(ctx,
-			`INSERT INTO services(name, description, icon, internal_url, external_url, group_id, position)
-			 VALUES(?, ?, ?, ?, ?, ?, ?)`,
-			v.Name, v.Description, v.Icon, v.InternalURL, v.ExternalURL, nullID(v.GroupID), v.Position)
+			`INSERT INTO services(name, description, icon, internal_url, external_url, group_id, position, guest_id)
+			 VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
+			v.Name, v.Description, v.Icon, v.InternalURL, v.ExternalURL, nullID(v.GroupID), v.Position, nullID(v.GuestID))
 		if isFK(err) {
 			return store.ErrNotFound
 		}
@@ -464,8 +467,8 @@ func (s *Store) SaveService(ctx context.Context, v *store.Service) error {
 	}
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE services SET name = ?, description = ?, icon = ?, internal_url = ?, external_url = ?,
-		   group_id = ?, position = ? WHERE id = ?`,
-		v.Name, v.Description, v.Icon, v.InternalURL, v.ExternalURL, nullID(v.GroupID), v.Position, v.ID)
+		   group_id = ?, position = ?, guest_id = ? WHERE id = ?`,
+		v.Name, v.Description, v.Icon, v.InternalURL, v.ExternalURL, nullID(v.GroupID), v.Position, nullID(v.GuestID), v.ID)
 	if isFK(err) {
 		return store.ErrNotFound
 	}
@@ -473,20 +476,8 @@ func (s *Store) SaveService(ctx context.Context, v *store.Service) error {
 }
 
 func (s *Store) DeleteService(ctx context.Context, id int64) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	// The guest that produced this service goes back to the "new" list.
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE guests SET state = 'new', service_id = NULL WHERE service_id = ?`, id); err != nil {
-		return err
-	}
-	if err := affected(tx.ExecContext(ctx, `DELETE FROM services WHERE id = ?`, id)); err != nil {
-		return err
-	}
-	return tx.Commit()
+	// A guest left without services is "new" again: that state is derived.
+	return affected(s.db.ExecContext(ctx, `DELETE FROM services WHERE id = ?`, id))
 }
 
 // ---- discovery: connections ----
@@ -572,22 +563,26 @@ func (s *Store) SetConnectionSync(ctx context.Context, id int64, at time.Time, e
 
 // ---- discovery: guests ----
 
-const guestCols = `id, conn_id, vmid, kind, name, node, status, ip, state, missing, service_id, first_seen, last_seen`
+// state is derived: ignored stays ignored, otherwise it follows the service count.
+const guestCols = `id, conn_id, vmid, kind, name, node, status, ip,
+  CASE WHEN state = 'ignored' THEN 'ignored'
+       WHEN (SELECT COUNT(*) FROM services WHERE guest_id = guests.id) > 0 THEN 'approved'
+       ELSE 'new' END,
+  missing, (SELECT COUNT(*) FROM services WHERE guest_id = guests.id), first_seen, last_seen`
 
 func scanGuest(r scanner) (*store.Guest, error) {
 	var g store.Guest
 	var missing int
 	var state string
-	var svc sql.NullInt64
 	var first, last int64
 	if err := r.Scan(&g.ID, &g.ConnID, &g.VMID, &g.Kind, &g.Name, &g.Node, &g.Status, &g.IP,
-		&state, &missing, &svc, &first, &last); err != nil {
+		&state, &missing, &g.Services, &first, &last); err != nil {
 		if isNoRows(err) {
 			return nil, store.ErrNotFound
 		}
 		return nil, err
 	}
-	g.State, g.Missing, g.ServiceID = store.GuestState(state), missing != 0, svc.Int64
+	g.State, g.Missing = store.GuestState(state), missing != 0
 	g.FirstSeen, g.LastSeen = fromTS(first), fromTS(last)
 	return &g, nil
 }
@@ -654,22 +649,48 @@ func (s *Store) SyncGuests(ctx context.Context, connID int64, found []store.Gues
 	return added, tx.Commit()
 }
 
-func (s *Store) SetGuestState(ctx context.Context, id int64, state store.GuestState, serviceID int64) error {
-	if !state.Valid() {
-		return fmt.Errorf("invalid guest state %q", state)
+func (s *Store) SetGuestState(ctx context.Context, id int64, state store.GuestState) error {
+	if state != store.GuestNew && state != store.GuestIgnored {
+		return fmt.Errorf("guest state %q cannot be set", state)
 	}
-	var svc any
-	if state == store.GuestApproved {
-		svc = nullID(serviceID)
-		if svc == nil {
-			return store.ErrNotFound
+	return affected(s.db.ExecContext(ctx, `UPDATE guests SET state = ? WHERE id = ?`, string(state), id))
+}
+
+func (s *Store) SetNodes(ctx context.Context, connID int64, nodes []store.Node) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM nodes WHERE conn_id = ?`, connID); err != nil {
+		return err
+	}
+	for _, n := range nodes {
+		if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO nodes(conn_id, name, addr) VALUES(?, ?, ?)`, connID, n.Name, n.Addr); err != nil {
+			if isFK(err) {
+				return store.ErrNotFound
+			}
+			return err
 		}
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE guests SET state = ?, service_id = ? WHERE id = ?`, string(state), svc, id)
-	if isFK(err) {
-		return store.ErrNotFound
+	return tx.Commit()
+}
+
+func (s *Store) ListNodes(ctx context.Context) ([]store.Node, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT conn_id, name, addr FROM nodes ORDER BY conn_id, name`)
+	if err != nil {
+		return nil, err
 	}
-	return affected(res, err)
+	defer rows.Close()
+	var out []store.Node
+	for rows.Next() {
+		var n store.Node
+		if err := rows.Scan(&n.ConnID, &n.Name, &n.Addr); err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) DeleteGuest(ctx context.Context, id int64) error {

@@ -48,6 +48,10 @@ func fakePVE(t *testing.T) *httptest.Server {
 		 {"name":"docker0","ip-addresses":[{"ip-address":"172.17.0.1","ip-address-type":"ipv4"}]},
 		 {"name":"eth0","ip-addresses":[{"ip-address":"fe80::1","ip-address-type":"ipv6"},{"ip-address":"192.168.77.10","ip-address-type":"ipv4"}]}]}}`))
 	}))
+	mux.HandleFunc("/api2/json/cluster/status", wrap(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"data":[{"type":"cluster","name":"lab"},
+		 {"type":"node","name":"pve1","ip":"192.168.77.2"},{"type":"node","name":"pve2","ip":""},{"type":"quorum"}]}`))
+	}))
 	return httptest.NewTLSServer(mux)
 }
 
@@ -185,5 +189,15 @@ func TestNormalizeFingerprint(t *testing.T) {
 		if NormalizeFingerprint(s) != "" {
 			t.Errorf("accepted %q", s)
 		}
+	}
+}
+
+func TestNodes(t *testing.T) {
+	srv := fakePVE(t)
+	defer srv.Close()
+	c, _ := New(Config{URL: srv.URL, TokenID: tokenID, Secret: secret, Insecure: true})
+	ns, err := c.Nodes(context.Background())
+	if err != nil || len(ns) != 2 || ns[0] != (Node{"pve1", "192.168.77.2"}) || ns[1].Name != "pve2" || ns[1].IP != "" {
+		t.Fatalf("nodes = %+v, %v", ns, err)
 	}
 }

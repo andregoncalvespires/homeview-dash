@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ type MemStore struct {
 	services map[int64]*Service
 	conns    map[int64]*Connection
 	guests   map[int64]*Guest
+	nodes    map[int64][]Node
 	prefs    map[int64]*prefsRow
 }
 
@@ -53,6 +55,7 @@ func NewMemStore() *MemStore {
 		services: map[int64]*Service{},
 		conns:    map[int64]*Connection{},
 		guests:   map[int64]*Guest{},
+		nodes:    map[int64][]Node{},
 		prefs:    map[int64]*prefsRow{},
 	}
 }
@@ -365,6 +368,11 @@ func (m *MemStore) SaveService(_ context.Context, s *Service) error {
 			return ErrNotFound
 		}
 	}
+	if s.GuestID != 0 {
+		if _, ok := m.guests[s.GuestID]; !ok {
+			return ErrNotFound
+		}
+	}
 	if s.ID == 0 {
 		s.ID = m.id()
 	} else if _, ok := m.services[s.ID]; !ok {
@@ -382,11 +390,6 @@ func (m *MemStore) DeleteService(_ context.Context, id int64) error {
 		return ErrNotFound
 	}
 	delete(m.services, id)
-	for _, g := range m.guests {
-		if g.ServiceID == id {
-			g.State, g.ServiceID = GuestNew, 0
-		}
-	}
 	return nil
 }
 
@@ -443,9 +446,10 @@ func (m *MemStore) DeleteConnection(_ context.Context, id int64) error {
 		return ErrNotFound
 	}
 	delete(m.conns, id)
+	delete(m.nodes, id)
 	for gid, g := range m.guests {
 		if g.ConnID == id {
-			delete(m.guests, gid)
+			m.dropGuest(gid)
 		}
 	}
 	return nil
@@ -467,7 +471,7 @@ func (m *MemStore) ListGuests(_ context.Context) ([]Guest, error) {
 	defer m.mu.Unlock()
 	out := make([]Guest, 0, len(m.guests))
 	for _, g := range m.guests {
-		out = append(out, *g)
+		out = append(out, m.guestView(g))
 	}
 	sort.Slice(out, func(i, j int) bool {
 		a, b := out[i], out[j]
@@ -489,7 +493,7 @@ func (m *MemStore) GetGuest(_ context.Context, id int64) (*Guest, error) {
 	if !ok {
 		return nil, ErrNotFound
 	}
-	cp := *g
+	cp := m.guestView(g)
 	return &cp, nil
 }
 
@@ -528,22 +532,65 @@ func (m *MemStore) SyncGuests(_ context.Context, connID int64, found []Guest, no
 	return added, nil
 }
 
-func (m *MemStore) SetGuestState(_ context.Context, id int64, state GuestState, serviceID int64) error {
+func (m *MemStore) SetGuestState(_ context.Context, id int64, state GuestState) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if state != GuestNew && state != GuestIgnored {
+		return fmt.Errorf("store: guest state %q cannot be set", state)
+	}
 	g, ok := m.guests[id]
 	if !ok {
 		return ErrNotFound
 	}
-	if state == GuestApproved {
-		if _, ok := m.services[serviceID]; !ok {
-			return ErrNotFound
-		}
-	} else {
-		serviceID = 0
-	}
-	g.State, g.ServiceID = state, serviceID
+	g.State = state
 	return nil
+}
+
+// guestView returns a copy with the derived fields filled in. Caller holds mu.
+func (m *MemStore) guestView(g *Guest) Guest {
+	cp := *g
+	for _, s := range m.services {
+		if s.GuestID == g.ID {
+			cp.Services++
+		}
+	}
+	switch {
+	case cp.State == GuestIgnored:
+	case cp.Services > 0:
+		cp.State = GuestApproved
+	default:
+		cp.State = GuestNew
+	}
+	return cp
+}
+
+func (m *MemStore) SetNodes(_ context.Context, connID int64, nodes []Node) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.conns[connID]; !ok {
+		return ErrNotFound
+	}
+	m.nodes[connID] = append([]Node(nil), nodes...)
+	for i := range m.nodes[connID] {
+		m.nodes[connID][i].ConnID = connID
+	}
+	return nil
+}
+
+func (m *MemStore) ListNodes(_ context.Context) ([]Node, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []Node
+	for _, ns := range m.nodes {
+		out = append(out, ns...)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].ConnID != out[j].ConnID {
+			return out[i].ConnID < out[j].ConnID
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out, nil
 }
 
 func (m *MemStore) DeleteGuest(_ context.Context, id int64) error {
@@ -552,8 +599,18 @@ func (m *MemStore) DeleteGuest(_ context.Context, id int64) error {
 	if _, ok := m.guests[id]; !ok {
 		return ErrNotFound
 	}
-	delete(m.guests, id)
+	m.dropGuest(id)
 	return nil
+}
+
+// dropGuest removes a guest; its services stay, unlinked. Caller holds mu.
+func (m *MemStore) dropGuest(id int64) {
+	delete(m.guests, id)
+	for _, s := range m.services {
+		if s.GuestID == id {
+			s.GuestID = 0
+		}
+	}
 }
 
 func (m *MemStore) prefsFor(userID int64) *prefsRow {

@@ -16,11 +16,13 @@ import (
 
 type fake struct {
 	guests []proxmox.Guest
+	nodes  []proxmox.Node
 	err    error
 	cfgs   *[]proxmox.Config
 }
 
 func (f fake) Guests(context.Context) ([]proxmox.Guest, error) { return f.guests, f.err }
+func (f fake) Nodes(context.Context) ([]proxmox.Node, error)   { return f.nodes, nil }
 
 func newSvc(t *testing.T, f *fake) (*Service, *store.MemStore) {
 	t.Helper()
@@ -246,5 +248,33 @@ func TestSyncAllAndRun(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("Run did not stop on cancelled context")
+	}
+}
+
+func TestNodeAddresses(t *testing.T) {
+	ctx := context.Background()
+	// A standalone server without a reported address falls back to the URL host.
+	s, st := newSvc(t, &fake{guests: []proxmox.Guest{{VMID: 1, Kind: "lxc", Name: "a", Node: "pve"}}, nodes: []proxmox.Node{{Name: "pve"}}})
+	if _, err := s.SaveConnection(ctx, 0, good); err != nil {
+		t.Fatal(err)
+	}
+	ns, _ := st.ListNodes(ctx)
+	if len(ns) != 1 || ns[0].Name != "pve" || ns[0].Addr != "pve.lan" {
+		t.Fatalf("fallback: %+v", ns)
+	}
+	// With several nodes, only reported (and valid) addresses are kept.
+	s, st = newSvc(t, &fake{nodes: []proxmox.Node{{Name: "a", IP: "10.0.0.1"}, {Name: "b", IP: "not an ip"}, {Name: "c"}}})
+	if _, err := s.SaveConnection(ctx, 0, good); err != nil {
+		t.Fatal(err)
+	}
+	ns, _ = st.ListNodes(ctx)
+	if len(ns) != 3 || ns[0].Addr != "10.0.0.1" || ns[1].Addr != "" || ns[2].Addr != "" {
+		t.Fatalf("multi: %+v", ns)
+	}
+	if got := hostOf("https://192.168.1.2:8006"); got != "192.168.1.2" {
+		t.Errorf("hostOf ip = %q", got)
+	}
+	if got := hostOf("https://[fe80::1]:8006"); got == "pve" || strings.ContainsAny(got, "[]/ ") {
+		t.Errorf("hostOf v6 = %q", got)
 	}
 }

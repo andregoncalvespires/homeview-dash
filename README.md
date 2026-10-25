@@ -29,7 +29,7 @@ O HomeView é uma alternativa simples a painéis como Heimdall e Homarr, pensada
 
 | Versão | Entrega |
 |---|---|
-| v0.4 | Agente leve para listar os containers Docker de cada máquina (labels `homeview.*` opcionais) |
+| v0.4 | Vários serviços por VM/LXC e IP do host Proxmox (sem agente Docker: você escolhe a aplicação) |
 | v0.5 | Importar/exportar YAML, visões por hierarquia/tipo, permissões por grupo |
 
 ## Instalação (3 passos)
@@ -120,7 +120,9 @@ O HomeView lista as VMs (qemu) e os LXCs do Proxmox e deixa você escolher o que
 
 **2. Cadastre a conexão** em **Descobertas → Conexões** (menu do admin): nome, URL (`https://IP:8006`), ID do token (`homeview@pve!dashboard`) e o segredo. O HomeView testa o acesso antes de salvar e não grava nada se falhar.
 
-**3. Aprove o que quiser** em **Descobertas**. Cada item vira um serviço, no grupo que você escolher (por padrão, o nome do nó do Proxmox, criado se não existir).
+**3. Aprove o que quiser** em **Descobertas**. Cada item vira um serviço, no grupo que você escolher (por padrão, o nome do nó do Proxmox, criado se não existir). **Uma máquina pode ter vários serviços**: depois da primeira aprovação, use **Adicionar outro serviço**, escolha a aplicação (o IP e a porta usual já vêm preenchidos) e repita quantas vezes precisar. Ex.: um LXC com OpenSpeedTest, Portainer e dois Zigbee2MQTT. A máquina só volta para "Novos" quando o último serviço dela for removido.
+
+Em **Serviços**, o campo **Onde roda** lista as máquinas descobertas e os **hosts do Proxmox**. Escolher um deles preenche o IP na URL interna (junto com a porta da aplicação) e, no caso de uma máquina, mostra o status ligado/desligado no cartão.
 
 Pontos importantes:
 

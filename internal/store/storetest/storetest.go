@@ -302,17 +302,23 @@ func testDiscovery(t *testing.T, s store.Store) {
 		t.Fatalf("ListGuests = %+v", guests)
 	}
 
-	// Decisions: approve 103 (needs a real service), ignore 104.
-	svc := &store.Service{Name: "docker", InternalURL: "http://10.0.0.23"}
+	// Approval is derived from services: 103 gets two, 104 is ignored.
+	svc := &store.Service{Name: "docker", InternalURL: "http://10.0.0.23", GuestID: guests[1].ID}
 	must(t, s.SaveService(ctx, svc))
-	isErr(t, s.SetGuestState(ctx, guests[1].ID, store.GuestApproved, 9999), store.ErrNotFound)
-	isErr(t, s.SetGuestState(ctx, guests[1].ID, store.GuestApproved, 0), store.ErrNotFound)
-	isErr(t, s.SetGuestState(ctx, 9999, store.GuestIgnored, 0), store.ErrNotFound)
-	must(t, s.SetGuestState(ctx, guests[1].ID, store.GuestApproved, svc.ID))
-	must(t, s.SetGuestState(ctx, guests[2].ID, store.GuestIgnored, svc.ID)) // serviceID is dropped
+	svc2 := &store.Service{Name: "portainer", InternalURL: "http://10.0.0.23:9000", GuestID: guests[1].ID}
+	must(t, s.SaveService(ctx, svc2))
+	isErr(t, s.SaveService(ctx, &store.Service{Name: "x", InternalURL: "http://x", GuestID: 9999}), store.ErrNotFound)
+	if got, _ := s.GetService(ctx, svc.ID); got.GuestID != guests[1].ID {
+		t.Fatalf("service guest link = %+v", got)
+	}
+	if err := s.SetGuestState(ctx, guests[1].ID, store.GuestApproved); err == nil {
+		t.Fatal("GuestApproved accepted")
+	}
+	isErr(t, s.SetGuestState(ctx, 9999, store.GuestIgnored), store.ErrNotFound)
+	must(t, s.SetGuestState(ctx, guests[2].ID, store.GuestIgnored))
 	g103, _ := s.GetGuest(ctx, guests[1].ID)
 	g104, _ := s.GetGuest(ctx, guests[2].ID)
-	if g103.State != store.GuestApproved || g103.ServiceID != svc.ID || g104.State != store.GuestIgnored || g104.ServiceID != 0 {
+	if g103.State != store.GuestApproved || g103.Services != 2 || g104.State != store.GuestIgnored || g104.Services != 0 {
 		t.Fatalf("decisions: %+v %+v", g103, g104)
 	}
 
@@ -332,7 +338,7 @@ func testDiscovery(t *testing.T, s store.Store) {
 	}
 	g103, _ = s.GetGuest(ctx, g103.ID)
 	if g103.Name != "docker2" || g103.Node != "pve2" || g103.Status != "stopped" || g103.IP != "" ||
-		g103.State != store.GuestApproved || g103.ServiceID != svc.ID || g103.Missing || !g103.LastSeen.Equal(later) || !g103.FirstSeen.Equal(now) {
+		g103.State != store.GuestApproved || g103.Services != 2 || g103.Missing || !g103.LastSeen.Equal(later) || !g103.FirstSeen.Equal(now) {
 		t.Fatalf("refreshed guest = %+v", g103)
 	}
 	g100, _ := s.GetGuest(ctx, guests[0].ID)
@@ -351,22 +357,47 @@ func testDiscovery(t *testing.T, s store.Store) {
 		t.Fatal("returning guest still missing")
 	}
 
-	// Deleting the service sends its guest back to "new".
+	// Deleting one of two services keeps the guest approved; deleting the last sends it back to "new".
 	must(t, s.DeleteService(ctx, svc.ID))
+	if g103, _ = s.GetGuest(ctx, g103.ID); g103.State != store.GuestApproved || g103.Services != 1 {
+		t.Fatalf("guest after first delete = %+v", g103)
+	}
+	must(t, s.DeleteService(ctx, svc2.ID))
 	g103, _ = s.GetGuest(ctx, g103.ID)
-	if g103.State != store.GuestNew || g103.ServiceID != 0 {
+	if g103.State != store.GuestNew || g103.Services != 0 {
 		t.Fatalf("guest after service delete = %+v", g103)
 	}
 	isErr(t, s.DeleteService(ctx, svc.ID), store.ErrNotFound)
 
+	// Deleting a guest leaves its services in place, unlinked.
+	orphan := &store.Service{Name: "orphan", InternalURL: "http://o.lan", GuestID: g103.ID}
+	must(t, s.SaveService(ctx, orphan))
 	must(t, s.DeleteGuest(ctx, g103.ID))
 	isErr(t, s.DeleteGuest(ctx, g103.ID), store.ErrNotFound)
+	if got, err := s.GetService(ctx, orphan.ID); err != nil || got.GuestID != 0 {
+		t.Fatalf("service after guest delete = %+v, %v", got, err)
+	}
+	must(t, s.DeleteService(ctx, orphan.ID))
+
+	// Proxmox hosts: replaced per connection, listed in order.
+	must(t, s.SetNodes(ctx, c.ID, []store.Node{{Name: "pve2", Addr: "10.0.0.2"}, {Name: "pve1", Addr: "10.0.0.1"}}))
+	must(t, s.SetNodes(ctx, other.ID, []store.Node{{Name: "solo"}}))
+	ns, _ := s.ListNodes(ctx)
+	if len(ns) != 3 || ns[0].Name != "pve1" || ns[0].Addr != "10.0.0.1" || ns[0].ConnID != c.ID || ns[2].Name != "solo" {
+		t.Fatalf("nodes = %+v", ns)
+	}
+	must(t, s.SetNodes(ctx, c.ID, []store.Node{{Name: "pve1", Addr: "10.0.0.9"}}))
+	if ns, _ = s.ListNodes(ctx); len(ns) != 2 || ns[0].Addr != "10.0.0.9" {
+		t.Fatalf("nodes after replace = %+v", ns)
+	}
+	isErr(t, s.SetNodes(ctx, 9999, nil), store.ErrNotFound)
 
 	// Deleting a connection removes its guests but never its services.
 	keep := &store.Service{Name: "kept", InternalURL: "http://x.lan"}
 	must(t, s.SaveService(ctx, keep))
 	g200, _ := s.ListGuests(ctx)
-	must(t, s.SetGuestState(ctx, g200[len(g200)-1].ID, store.GuestApproved, keep.ID))
+	keep.GuestID = g200[len(g200)-1].ID
+	must(t, s.SaveService(ctx, keep))
 	must(t, s.DeleteConnection(ctx, c.ID))
 	isErr(t, s.DeleteConnection(ctx, c.ID), store.ErrNotFound)
 	if all, _ := s.ListGuests(ctx); len(all) != 0 {
@@ -377,6 +408,9 @@ func testDiscovery(t *testing.T, s store.Store) {
 	}
 	_, err = s.GetConnection(ctx, c.ID)
 	isErr(t, err, store.ErrNotFound)
+	if ns, _ = s.ListNodes(ctx); len(ns) != 1 || ns[0].Name != "solo" {
+		t.Fatalf("nodes survived their connection: %+v", ns)
+	}
 }
 
 func testPrefs(t *testing.T, s store.Store) {

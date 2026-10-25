@@ -1,7 +1,9 @@
 package web
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/mail"
 	"strconv"
@@ -39,6 +41,16 @@ type adminServicesData struct {
 	Rows     []serviceRow
 	Apps     []catalog.App // catalog entries for the "application" picker
 	NewGroup string        // text typed in "or create a new group", kept across a failed save
+	Origins  []originOpt   // machines and Proxmox hosts a service can run on
+}
+
+// originOpt is one entry of the "where does it run" picker.
+type originOpt struct {
+	Value    string // "g:<guest id>" links the service to a machine; "h:<addr>" only fills the address
+	Label    string
+	Addr     string
+	Host     bool // a Proxmox host rather than a VM/container
+	Selected bool
 }
 
 func (s *Server) loadServicesPage(r *http.Request, edit store.Service) (adminServicesData, error) {
@@ -55,6 +67,9 @@ func (s *Server) loadServicesPage(r *http.Request, edit store.Service) (adminSer
 		names[g.ID] = g.Name
 	}
 	data := adminServicesData{Edit: edit, Groups: groups, Apps: catalog.All()}
+	if data.Origins, err = s.origins(r.Context(), edit.GuestID); err != nil {
+		return adminServicesData{}, err
+	}
 	for _, sv := range services {
 		data.Rows = append(data.Rows, serviceRow{Service: sv, GroupName: names[sv.GroupID]})
 	}
@@ -118,6 +133,7 @@ func (s *Server) saveService(w http.ResponseWriter, r *http.Request, sess *sessi
 	if gid, err := strconv.ParseInt(r.PostFormValue("group_id"), 10, 64); err == nil && gid > 0 {
 		v.GroupID = gid
 	}
+	v.GuestID = guestFromOrigin(r.PostFormValue("origin"))
 	newGroup, groupOK := store.CleanText(r.PostFormValue("new_group"), 80)
 	if key := validateService(&v); key != "" {
 		s.rerenderServiceForm(w, r, sess, v, newGroup, key)
@@ -135,7 +151,7 @@ func (s *Server) saveService(w http.ResponseWriter, r *http.Request, sess *sessi
 		v.GroupID = gid
 	}
 	if err := s.st.SaveService(r.Context(), &v); err != nil {
-		if errors.Is(err, store.ErrNotFound) { // group (or the service itself) vanished
+		if errors.Is(err, store.ErrNotFound) { // group, machine or the service itself vanished
 			s.rerenderServiceForm(w, r, sess, v, newGroup, "err.group_missing")
 			return
 		}
@@ -282,4 +298,51 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request, sess *sessio
 		return
 	}
 	http.Redirect(w, r, "/admin/users?ok=msg.deleted", http.StatusSeeOther)
+}
+
+// origins lists where a service can run: discovered machines (which also link
+// the service to them) and the Proxmox hosts themselves (address only).
+// keep is a guest that stays listed even when it is gone or ignored, so an
+// existing service still shows where it belongs.
+func (s *Server) origins(ctx context.Context, keep int64) ([]originOpt, error) {
+	guests, err := s.st.ListGuests(ctx)
+	if err != nil {
+		return nil, err
+	}
+	nodes, err := s.st.ListNodes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []originOpt
+	for _, g := range guests {
+		if (g.Missing || g.State == store.GuestIgnored) && g.ID != keep {
+			continue
+		}
+		kind := "VM"
+		if g.Kind == "lxc" {
+			kind = "LXC"
+		}
+		label := fmt.Sprintf("%s · %s %d", g.Name, kind, g.VMID)
+		if g.IP != "" {
+			label += " · " + g.IP
+		}
+		out = append(out, originOpt{Value: "g:" + strconv.FormatInt(g.ID, 10), Label: label, Addr: g.IP, Selected: g.ID == keep})
+	}
+	for _, n := range nodes {
+		if n.Addr == "" {
+			continue
+		}
+		out = append(out, originOpt{Value: "h:" + n.Addr, Label: "Proxmox " + n.Name + " · " + n.Addr, Addr: n.Addr, Host: true})
+	}
+	return out, nil
+}
+
+// guestFromOrigin returns the guest id of an origin value ("g:<id>"), else 0.
+func guestFromOrigin(v string) int64 {
+	if id, ok := strings.CutPrefix(v, "g:"); ok {
+		if n, err := strconv.ParseInt(id, 10, 64); err == nil && n > 0 {
+			return n
+		}
+	}
+	return 0
 }

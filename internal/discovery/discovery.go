@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	neturl "net/url"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ import (
 // Client is what the service needs from a Proxmox client (tests fake it).
 type Client interface {
 	Guests(ctx context.Context) ([]proxmox.Guest, error)
+	Nodes(ctx context.Context) ([]proxmox.Node, error)
 }
 
 // InputError reports invalid form input; Key is an i18n message key.
@@ -130,7 +132,7 @@ func (s *Service) SaveConnection(ctx context.Context, id int64, in ConnInput) (*
 
 	tctx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
-	guests, err := s.fetch(tctx, in.URL, in.TokenID, secret, in.Fingerprint, in.Insecure)
+	fr, err := s.fetch(tctx, in.URL, in.TokenID, secret, in.Fingerprint, in.Insecure)
 	if err != nil {
 		return nil, &ConnectError{Err: err}
 	}
@@ -143,24 +145,59 @@ func (s *Service) SaveConnection(ctx context.Context, id int64, in ConnInput) (*
 	if err := s.st.SaveConnection(ctx, c); err != nil {
 		return nil, err
 	}
-	if _, err := s.store(ctx, c.ID, guests); err != nil {
+	if _, err := s.store(ctx, c.ID, c.URL, fr); err != nil {
 		s.log.Warn("first sync could not be stored", "connection", c.Name, "err", err)
 	}
 	return c, nil
 }
 
-func (s *Service) fetch(ctx context.Context, url, tokenID, secret, fp string, insecure bool) ([]proxmox.Guest, error) {
+type fetched struct {
+	guests []proxmox.Guest
+	nodes  []proxmox.Node // best effort: empty when the host list could not be read
+}
+
+func (s *Service) fetch(ctx context.Context, url, tokenID, secret, fp string, insecure bool) (fetched, error) {
 	cl, err := s.NewClient(proxmox.Config{URL: url, TokenID: tokenID, Secret: secret, Fingerprint: fp, Insecure: insecure})
 	if err != nil {
-		return nil, err
+		return fetched{}, err
 	}
-	return cl.Guests(ctx)
+	g, err := cl.Guests(ctx)
+	if err != nil {
+		return fetched{}, err
+	}
+	n, err := cl.Nodes(ctx)
+	if err != nil {
+		s.log.Debug("could not list Proxmox hosts", "err", err)
+	}
+	return fetched{g, n}, nil
+}
+
+// hostOf returns the host part of a Proxmox URL when it is usable as a
+// service address (an IP or a plain host name), else "".
+func hostOf(raw string) string {
+	u, err := neturl.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	h := u.Hostname()
+	if ip := cleanIP(h); ip != "" {
+		return ip
+	}
+	if h == "" || len(h) > 253 {
+		return ""
+	}
+	for _, r := range h {
+		if !(r == '.' || r == '-' || (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')) {
+			return ""
+		}
+	}
+	return h
 }
 
 // store sanitises and saves a discovery result and records success.
-func (s *Service) store(ctx context.Context, connID int64, found []proxmox.Guest) (int, error) {
+func (s *Service) store(ctx context.Context, connID int64, connURL string, fr fetched) (int, error) {
 	var gs []store.Guest
-	for _, g := range found {
+	for _, g := range fr.guests {
 		if g.Template {
 			continue
 		}
@@ -176,6 +213,23 @@ func (s *Service) store(ctx context.Context, connID int64, found []proxmox.Guest
 	added, err := s.st.SyncGuests(ctx, connID, gs, now)
 	if err != nil {
 		return 0, err
+	}
+	// Hosts are optional extras: a failure here never fails the sync. When the
+	// cluster does not report an address and there is a single node, the URL
+	// the admin typed is the best address there is. An empty list keeps the
+	// previous hosts.
+	if len(fr.nodes) > 0 {
+		var ns []store.Node
+		for _, n := range fr.nodes {
+			addr := cleanIP(n.IP)
+			if addr == "" && len(fr.nodes) == 1 {
+				addr = hostOf(connURL)
+			}
+			ns = append(ns, store.Node{Name: cleanLabel(n.Name, 80, "?"), Addr: addr})
+		}
+		if err := s.st.SetNodes(ctx, connID, ns); err != nil {
+			s.log.Warn("could not store Proxmox hosts", "connection", connID, "err", err)
+		}
 	}
 	return added, s.st.SetConnectionSync(ctx, connID, now, "")
 }
@@ -212,15 +266,15 @@ func (s *Service) syncLocked(ctx context.Context, connID int64) (Result, error) 
 	}
 	tctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	found, err := s.fetch(tctx, c.URL, c.TokenID, secret, c.Fingerprint, c.Insecure)
+	fr, err := s.fetch(tctx, c.URL, c.TokenID, secret, c.Fingerprint, c.Insecure)
 	if err != nil {
 		return fail(err)
 	}
-	added, err := s.store(ctx, connID, found)
+	added, err := s.store(ctx, connID, c.URL, fr)
 	if err != nil {
 		return fail(err)
 	}
-	return Result{Total: len(found), Added: added}, nil
+	return Result{Total: len(fr.guests), Added: added}, nil
 }
 
 // SyncAll refreshes every connection, logging (not returning) failures.

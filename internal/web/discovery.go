@@ -167,8 +167,9 @@ type approveForm struct {
 
 type guestRow struct {
 	store.Guest
-	Form        approveForm
-	ServiceName string
+	Form     approveForm
+	Services []store.Service // what already runs on this machine
+	Apps     []catalog.App   // for the application picker
 }
 
 type connSection struct {
@@ -232,10 +233,13 @@ func (s *Server) loadDiscovery(r *http.Request, override *approveForm) (discover
 	if err != nil {
 		return discoveryData{}, err
 	}
-	svcName := map[int64]string{}
+	byGuest := map[int64][]store.Service{}
 	for _, sv := range services {
-		svcName[sv.ID] = sv.Name
+		if sv.GuestID != 0 {
+			byGuest[sv.GuestID] = append(byGuest[sv.GuestID], sv)
+		}
 	}
+	apps := catalog.All()
 	data := discoveryData{Groups: groups, Connection: len(conns) > 0}
 	for _, c := range conns {
 		sec := connSection{Conn: c}
@@ -243,7 +247,17 @@ func (s *Server) loadDiscovery(r *http.Request, override *approveForm) (discover
 			if g.ConnID != c.ID {
 				continue
 			}
-			row := guestRow{Guest: g, Form: defaultForm(g, groups), ServiceName: svcName[g.ServiceID]}
+			row := guestRow{Guest: g, Form: defaultForm(g, groups), Services: byGuest[g.ID], Apps: apps}
+			if len(row.Services) > 0 { // one more service on a machine that already has some: start blank
+				app := (*catalog.App)(nil)
+				row.Form.Service.Name, row.Form.Service.Icon, row.Form.App = "", "", app
+				row.Form.Service.InternalURL = ""
+				if g.IP != "" {
+					row.Form.Service.InternalURL = "http://" + g.IP
+				}
+				row.Form.GroupID = row.Services[0].GroupID
+				row.Form.NewGroup = ""
+			}
 			if override != nil && override.GuestID == g.ID {
 				app := row.Form.App
 				row.Form = *override
@@ -352,12 +366,14 @@ func (s *Server) approveGuest(w http.ResponseWriter, r *http.Request, sess *sess
 		s.serverError(w, r, sess, err)
 		return
 	}
-	if g.State == store.GuestApproved { // double click or a stale page
+	// Any number of services may be added to one machine, so an approved guest
+	// is fine here. A missing one is not: there is nothing left to point at.
+	if g.Missing {
 		http.Redirect(w, r, "/admin/discovery?err=err.guest_state", http.StatusSeeOther)
 		return
 	}
 
-	form := approveForm{GuestID: id, Open: true, Service: store.Service{
+	form := approveForm{GuestID: id, Open: true, Service: store.Service{GuestID: id,
 		Name: r.PostFormValue("name"), Description: r.PostFormValue("description"), Icon: r.PostFormValue("icon"),
 		InternalURL: r.PostFormValue("internal_url"), ExternalURL: r.PostFormValue("external_url"),
 	}}
@@ -385,17 +401,18 @@ func (s *Server) approveGuest(w http.ResponseWriter, r *http.Request, sess *sess
 		form.Service.GroupID = gid
 	}
 	if err := s.st.SaveService(ctx, &form.Service); err != nil {
-		s.serverError(w, r, sess, err)
-		return
-	}
-	if err := s.st.SetGuestState(ctx, id, store.GuestApproved, form.Service.ID); err != nil {
-		_ = s.st.DeleteService(ctx, form.Service.ID) // do not leave an orphan behind
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.Is(err, store.ErrNotFound) { // the machine was removed meanwhile
 			http.Redirect(w, r, "/admin/discovery?err=err.guest_state", http.StatusSeeOther)
 			return
 		}
 		s.serverError(w, r, sess, err)
 		return
+	}
+	if g.State == store.GuestIgnored { // adding a service means it is wanted
+		if err := s.st.SetGuestState(ctx, id, store.GuestNew); err != nil && !errors.Is(err, store.ErrNotFound) {
+			s.serverError(w, r, sess, err)
+			return
+		}
 	}
 	http.Redirect(w, r, "/admin/discovery?ok=msg.guest_approved", http.StatusSeeOther)
 }
@@ -425,7 +442,7 @@ func (s *Server) setGuestState(state store.GuestState, okKey string) func(http.R
 			return
 		}
 		if err == nil {
-			err = s.st.SetGuestState(r.Context(), id, state, 0)
+			err = s.st.SetGuestState(r.Context(), id, state)
 		}
 		if err != nil && !errors.Is(err, store.ErrNotFound) {
 			s.serverError(w, r, sess, err)

@@ -164,10 +164,10 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 		s.serverError(w, r, sess, err)
 		return
 	}
-	status := map[int64]string{} // service id -> last known guest status
+	guestStatus := map[int64]string{} // guest id -> last known status
 	for _, g := range guests {
-		if g.State == store.GuestApproved && !g.Missing && (g.Status == "running" || g.Status == "stopped") {
-			status[g.ServiceID] = g.Status
+		if !g.Missing && (g.Status == "running" || g.Status == "stopped") {
+			guestStatus[g.ID] = g.Status
 		}
 	}
 	lang := s.lang(r)
@@ -189,7 +189,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 		view := serviceView{
 			Name: sv.Name, Description: sv.Description,
 			Primary: l.Primary, Secondary: l.Secondary,
-			Status: status[sv.ID],
+			Status: guestStatus[sv.GuestID],
 		}
 		low := strings.ToLower(sv.Icon)
 		if app, ok := catalog.FromIcon(sv.Icon); ok {

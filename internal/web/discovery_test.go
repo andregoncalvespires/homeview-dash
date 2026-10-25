@@ -15,10 +15,12 @@ import (
 
 type fakePVE struct {
 	guests []proxmox.Guest
+	nodes  []proxmox.Node
 	err    error
 }
 
 func (f *fakePVE) Guests(context.Context) ([]proxmox.Guest, error) { return f.guests, f.err }
+func (f *fakePVE) Nodes(context.Context) ([]proxmox.Node, error)   { return f.nodes, nil }
 
 const pveSecret = "very-secret-token-value"
 
@@ -29,7 +31,7 @@ func discoveryEnv(t *testing.T) (*env, *fakePVE) {
 		{VMID: 100, Kind: "qemu", Name: "haos", Node: "pve1", Status: "running", IP: "192.168.1.10"},
 		{VMID: 103, Kind: "lxc", Name: "docker", Node: "pve1", Status: "stopped"},
 		{VMID: 104, Kind: "lxc", Name: "scratch", Node: "pve2", Status: "running", IP: "192.168.1.14"},
-	}}
+	}, nodes: []proxmox.Node{{Name: "pve1", IP: "192.168.1.2"}, {Name: "pve2", IP: "192.168.1.3"}}}
 	d := discovery.New(e.st, []byte("0123456789abcdef0123456789abcdef"), nil)
 	d.NewClient = func(proxmox.Config) (discovery.Client, error) { return f, nil }
 	e.web.SetDiscovery(d)
@@ -165,17 +167,65 @@ func TestDiscoveryFlow(t *testing.T) {
 		t.Fatalf("services: %+v", svcs)
 	}
 	g100, _ := e.st.GetGuest(ctx, id100)
-	if g100.State != store.GuestApproved || g100.ServiceID == 0 {
+	if g100.State != store.GuestApproved || g100.Services != 1 {
 		t.Fatalf("guest state: %+v", g100)
 	}
 
-	// A second approval of the same guest (double click) creates nothing.
-	v := url.Values{"csrf": {tok}, "id": {strconv.FormatInt(id100, 10)}, "name": {"Dup"}, "internal_url": {"http://x.lan"}}
-	if r, _ := e.post(admin, "/admin/discovery/approve", v); r.Header.Get("Location") != "/admin/discovery?err=err.guest_state" {
-		t.Errorf("double approve: %d %q", r.StatusCode, r.Header.Get("Location"))
+	// A machine can host more services: a second one is added, linked to the same guest.
+	approve(id100, "Zigbee2MQTT", "http://192.168.1.10:8080", "pve1")
+	approve(id100, "Z2M garagem", "http://192.168.1.10:8081", "pve1")
+	if g, _ := e.st.GetGuest(ctx, id100); g.Services != 3 || g.State != store.GuestApproved {
+		t.Fatalf("after extra services: %+v", g)
 	}
-	if sv, _ := e.st.ListServices(ctx); len(sv) != 2 {
-		t.Errorf("duplicate service: %+v", sv)
+	if sv, _ := e.st.ListServices(ctx); len(sv) != 4 {
+		t.Errorf("services: %+v", sv)
+	}
+	_, pageHTML := e.get(admin, "/admin/discovery")
+	for _, want := range []string{"Zigbee2MQTT", "Z2M garagem", `data-addr="192.168.1.10"`, "Adicionar outro serviço", `class="app-model"`} {
+		if !strings.Contains(pageHTML, want) {
+			t.Errorf("discovery page lacks %q", want)
+		}
+	}
+	// The services page offers machines and Proxmox hosts as origins.
+	_, svcPage := e.get(admin, "/admin/services")
+	for _, want := range []string{"haos · VM 100 · 192.168.1.10", `data-addr="192.168.1.10"`, "Proxmox pve1 · 192.168.1.2", `value="h:192.168.1.3"`} {
+		if !strings.Contains(svcPage, want) {
+			t.Errorf("services page lacks %q", want)
+		}
+	}
+	// A manual service picked from that list links to the machine; a host address does not.
+	post := func(origin, name string, want int) {
+		v := url.Values{"csrf": {tok}, "name": {name}, "internal_url": {"http://192.168.1.10:1234"}, "origin": {origin}}
+		if r, _ := e.post(admin, "/admin/services/save", v); r.StatusCode != want {
+			t.Fatalf("save %s: %d, want %d", name, r.StatusCode, want)
+		}
+	}
+	post("g:"+strconv.FormatInt(id100, 10), "Linked", 303)
+	post("h:192.168.1.2", "OnHost", 303)
+	post("g:99999", "Dangling", 400) // the form is shown again with an error
+	var linked, onHost, dangling *store.Service
+	all, _ := e.st.ListServices(ctx)
+	for i := range all {
+		switch all[i].Name {
+		case "Linked":
+			linked = &all[i]
+		case "OnHost":
+			onHost = &all[i]
+		case "Dangling":
+			dangling = &all[i]
+		}
+	}
+	if linked == nil || linked.GuestID != id100 || onHost == nil || onHost.GuestID != 0 {
+		t.Fatalf("origin handling: %+v %+v", linked, onHost)
+	}
+	if dangling != nil {
+		t.Errorf("service pointing at an unknown machine was saved: %+v", dangling)
+	}
+	for _, sv := range []*store.Service{linked, onHost} {
+		e.post(admin, "/admin/services/delete", url.Values{"csrf": {tok}, "id": {strconv.FormatInt(sv.ID, 10)}})
+	}
+	if ns, _ := e.st.ListNodes(ctx); len(ns) != 2 || ns[0].Addr != "192.168.1.2" {
+		t.Errorf("hosts were not stored: %+v", ns)
 	}
 	// Approved guests cannot be ignored behind the service's back.
 	if r, _ := e.post(admin, "/admin/discovery/ignore", url.Values{"csrf": {tok}, "id": {strconv.FormatInt(id100, 10)}}); r.Header.Get("Location") != "/admin/discovery?err=err.guest_state" {
@@ -228,9 +278,13 @@ func TestDiscoveryFlow(t *testing.T) {
 	}
 	f.err = nil
 
-	// Removing the service puts its guest back in the "new" list.
-	e.post(admin, "/admin/services/delete", url.Values{"csrf": {tok}, "id": {strconv.FormatInt(g100.ServiceID, 10)}})
-	if g, _ := e.st.GetGuest(ctx, id100); g.State != store.GuestNew {
+	// Removing every service puts the guest back in the "new" list.
+	for _, sv := range func() []store.Service { l, _ := e.st.ListServices(ctx); return l }() {
+		if sv.GuestID == id100 {
+			e.post(admin, "/admin/services/delete", url.Values{"csrf": {tok}, "id": {strconv.FormatInt(sv.ID, 10)}})
+		}
+	}
+	if g, _ := e.st.GetGuest(ctx, id100); g.State != store.GuestNew || g.Services != 0 {
 		t.Errorf("guest after service delete: %+v", g)
 	}
 
@@ -291,7 +345,7 @@ func TestCatalogInServiceAndDiscoveryForms(t *testing.T) {
 
 	// The service form offers the catalog and keeps the selection when editing.
 	_, b = e.get(admin, "/admin/services")
-	for _, want := range []string{`<select id="app-model"`, `value="grafana"`, `data-port="3000"`, `value="zigbee2mqtt"`} {
+	for _, want := range []string{`<select class="app-model"`, `value="grafana"`, `data-port="3000"`, `value="zigbee2mqtt"`} {
 		if !strings.Contains(b, want) {
 			t.Errorf("services form lacks %q", want)
 		}

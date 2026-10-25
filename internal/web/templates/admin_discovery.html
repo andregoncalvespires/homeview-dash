@@ -1,10 +1,17 @@
 {{define "approve"}}
 {{/* args: dict-like via struct: .Row (guestRow), .Root (page) */}}
 <details class="approve"{{if .Row.Form.Open}} open{{end}}>
-  <summary class="btn small primary">{{t .Root.Lang "disc.add"}}</summary>
+  <summary class="btn small primary">{{if .Row.Services}}{{t .Root.Lang "disc.add_more"}}{{else}}{{t .Root.Lang "disc.add"}}{{end}}</summary>
   {{with .Row.Form.App}}<p class="muted app-suggest"><img class="appicon" src="{{.IconURL}}" alt=""> {{t $.Root.Lang "disc.suggestion"}} <strong>{{.Name}}</strong>{{if .PortLabel}} · {{t $.Root.Lang "app.port"}} {{.PortLabel}}{{end}}</p>{{end}}
-  <form method="post" action="/admin/discovery/approve" class="form grid2">
+  <form method="post" action="/admin/discovery/approve" class="form grid2" data-appform data-addr="{{.Row.IP}}">
     <input type="hidden" name="csrf" value="{{.Root.CSRF}}"><input type="hidden" name="id" value="{{.Row.ID}}">
+    <label>{{t .Root.Lang "f.app"}}
+      <select class="app-model" data-port-prefix="{{t .Root.Lang "app.port"}}">
+        <option value="">{{t .Root.Lang "f.app.none"}}</option>
+        {{range .Row.Apps}}<option value="{{.ID}}" data-name="{{.Name}}" data-web="{{if .Web}}1{{end}}" data-scheme="{{.Scheme}}" data-port="{{.Port}}" data-path="{{.Path}}" data-portlabel="{{.PortLabel}}"{{if and $.Row.Form.App (eq $.Row.Form.App.ID .ID)}} selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+      <small class="app-hint muted">{{t .Root.Lang "f.app.help"}}</small>
+    </label>
     <label>{{t .Root.Lang "f.name"}}<input name="name" value="{{.Row.Form.Service.Name}}" required maxlength="80"></label>
     <label>{{t .Root.Lang "f.group"}}
       <select name="group_id">
@@ -78,8 +85,11 @@
   <h3>{{t $root.Lang "disc.approved"}} ({{len .Approved}})</h3>
   <ul class="guests">
     {{range .Approved}}
-    <li><div class="guest-head"><div class="guest-info">{{template "guestmeta" (dict "G" . "Lang" $root.Lang)}}{{if .Missing}} <span class="state bad">{{t $root.Lang "disc.gone"}}</span>{{end}}</div>
-      <a class="btn small" href="/admin/services?edit={{.ServiceID}}">{{if .ServiceName}}{{.ServiceName}}{{else}}{{t $root.Lang "f.edit"}}{{end}}</a></div></li>
+    <li>
+      <div class="guest-head"><div class="guest-info">{{template "guestmeta" (dict "G" . "Lang" $root.Lang)}}{{if .Missing}} <span class="state bad">{{t $root.Lang "disc.gone"}}</span>{{end}}</div></div>
+      <ul class="svclist">{{range .Services}}<li><a href="/admin/services?edit={{.ID}}">{{.Name}}</a></li>{{end}}</ul>
+      {{if not .Missing}}{{template "approve" (dict "Row" . "Root" $root)}}{{end}}
+    </li>
     {{end}}
   </ul>
   {{end}}
