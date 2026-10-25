@@ -34,10 +34,11 @@ type serviceRow struct {
 }
 
 type adminServicesData struct {
-	Edit   store.Service
-	Groups []store.Group
-	Rows   []serviceRow
-	Apps   []catalog.App // catalog entries for the "application" picker
+	Edit     store.Service
+	Groups   []store.Group
+	Rows     []serviceRow
+	Apps     []catalog.App // catalog entries for the "application" picker
+	NewGroup string        // text typed in "or create a new group", kept across a failed save
 }
 
 func (s *Server) loadServicesPage(r *http.Request, edit store.Service) (adminServicesData, error) {
@@ -117,13 +118,25 @@ func (s *Server) saveService(w http.ResponseWriter, r *http.Request, sess *sessi
 	if gid, err := strconv.ParseInt(r.PostFormValue("group_id"), 10, 64); err == nil && gid > 0 {
 		v.GroupID = gid
 	}
+	newGroup, groupOK := store.CleanText(r.PostFormValue("new_group"), 80)
 	if key := validateService(&v); key != "" {
-		s.rerenderServiceForm(w, r, sess, v, key)
+		s.rerenderServiceForm(w, r, sess, v, newGroup, key)
 		return
+	} else if !groupOK {
+		s.rerenderServiceForm(w, r, sess, v, newGroup, "err.name")
+		return
+	}
+	if newGroup != "" { // typing a name wins over the list; the group is created when new
+		gid, err := s.groupFor(r.Context(), newGroup)
+		if err != nil {
+			s.serverError(w, r, sess, err)
+			return
+		}
+		v.GroupID = gid
 	}
 	if err := s.st.SaveService(r.Context(), &v); err != nil {
 		if errors.Is(err, store.ErrNotFound) { // group (or the service itself) vanished
-			s.rerenderServiceForm(w, r, sess, v, "err.group_missing")
+			s.rerenderServiceForm(w, r, sess, v, newGroup, "err.group_missing")
 			return
 		}
 		s.serverError(w, r, sess, err)
@@ -132,12 +145,13 @@ func (s *Server) saveService(w http.ResponseWriter, r *http.Request, sess *sessi
 	http.Redirect(w, r, "/admin/services?ok=msg.saved", http.StatusSeeOther)
 }
 
-func (s *Server) rerenderServiceForm(w http.ResponseWriter, r *http.Request, sess *session, v store.Service, key string) {
+func (s *Server) rerenderServiceForm(w http.ResponseWriter, r *http.Request, sess *session, v store.Service, newGroup, key string) {
 	data, err := s.loadServicesPage(r, v)
 	if err != nil {
 		s.serverError(w, r, sess, err)
 		return
 	}
+	data.NewGroup = newGroup
 	s.render(w, r, sess, "admin_services", http.StatusBadRequest, &page{
 		TitleKey: "admin.services.title", Flash: key, FlashErr: true, Data: data,
 	})

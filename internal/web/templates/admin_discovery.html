@@ -6,7 +6,13 @@
   <form method="post" action="/admin/discovery/approve" class="form grid2">
     <input type="hidden" name="csrf" value="{{.Root.CSRF}}"><input type="hidden" name="id" value="{{.Row.ID}}">
     <label>{{t .Root.Lang "f.name"}}<input name="name" value="{{.Row.Form.Service.Name}}" required maxlength="80"></label>
-    <label>{{t .Root.Lang "f.group"}}<input name="group" list="groups" value="{{.Row.Form.Group}}" maxlength="80"><small class="muted">{{t .Root.Lang "disc.group.help"}}</small></label>
+    <label>{{t .Root.Lang "f.group"}}
+      <select name="group_id">
+        <option value="0">{{t .Root.Lang "f.nogroup"}}</option>
+        {{range .Root.Data.Groups}}<option value="{{.ID}}"{{if eq .ID $.Row.Form.GroupID}} selected{{end}}>{{.Name}}</option>{{end}}
+      </select>
+    </label>
+    <label>{{t .Root.Lang "f.newgroup"}}<input name="new_group" value="{{.Row.Form.NewGroup}}" maxlength="80" placeholder="{{t .Root.Lang "f.newgroup.ph"}}"><small class="muted">{{t .Root.Lang "f.newgroup.help"}}</small></label>
     <label>{{t .Root.Lang "f.internal"}}<input name="internal_url" value="{{.Row.Form.Service.InternalURL}}" placeholder="http://{{if .Row.IP}}{{.Row.IP}}{{else}}192.168.1.10{{end}}:8080" maxlength="2048"><small class="muted">{{t .Root.Lang "disc.url.help"}}</small></label>
     <label>{{t .Root.Lang "f.external"}}<input name="external_url" value="{{.Row.Form.Service.ExternalURL}}" placeholder="https://app.example.com" maxlength="2048"></label>
     <label>{{t .Root.Lang "f.description"}}<input name="description" value="{{.Row.Form.Service.Description}}" maxlength="200"></label>
@@ -40,7 +46,6 @@
   </form>
   <a class="btn" href="/admin/connections">{{t .Lang "nav.connections"}}</a>
 </div>
-<datalist id="groups">{{range .Data.Groups}}<option value="{{.Name}}">{{end}}</datalist>
 
 {{$root := .}}
 {{range .Data.Sections}}

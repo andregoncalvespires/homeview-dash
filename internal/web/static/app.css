@@ -44,6 +44,9 @@ h2 { font-size: 1.05rem; margin: 0 0 .75rem; }
 .brand:hover { text-decoration: none; }
 .top nav { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; font-size: .95rem; }
 .top nav form { margin: 0; }
+.top nav a { color: var(--muted); }
+.top nav a:hover, .top nav a[aria-current="page"] { color: var(--text); }
+.top nav a[aria-current="page"] { font-weight: 600; }
 .linkbtn { background: none; border: 0; padding: 0; font: inherit; color: var(--muted); cursor: pointer; }
 .linkbtn:hover { color: var(--text); text-decoration: underline; }
 

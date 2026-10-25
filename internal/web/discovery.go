@@ -157,11 +157,12 @@ func (s *Server) deleteConnection(w http.ResponseWriter, r *http.Request, sess *
 
 // approveForm is the "add to dashboard" form of one guest.
 type approveForm struct {
-	GuestID int64
-	Service store.Service
-	Group   string       // group name; reused when it exists, created otherwise
-	Open    bool         // render the <details> expanded (after a validation error)
-	App     *catalog.App // catalog entry recognised from the guest name, if any
+	GuestID  int64
+	Service  store.Service
+	GroupID  int64        // group picked from the list (0 = none)
+	NewGroup string       // name typed to create/reuse a group; wins over GroupID
+	Open     bool         // render the <details> expanded (after a validation error)
+	App      *catalog.App // catalog entry recognised from the guest name, if any
 }
 
 type guestRow struct {
@@ -184,8 +185,18 @@ type discoveryData struct {
 	Connection bool          // at least one connection exists
 }
 
-func defaultForm(g store.Guest) approveForm {
-	f := approveForm{GuestID: g.ID, Group: g.Node}
+// defaultForm pre-fills the "add to dashboard" form of a guest. The group
+// defaults to the existing one named like the node, or proposes creating it.
+func defaultForm(g store.Guest, groups []store.Group) approveForm {
+	f := approveForm{GuestID: g.ID}
+	for _, gr := range groups {
+		if strings.EqualFold(gr.Name, g.Node) {
+			f.GroupID = gr.ID
+		}
+	}
+	if f.GroupID == 0 {
+		f.NewGroup = g.Node
+	}
 	f.Service.Name = g.Name
 	if g.Kind == "lxc" {
 		f.Service.Icon = "📦"
@@ -232,7 +243,7 @@ func (s *Server) loadDiscovery(r *http.Request, override *approveForm) (discover
 			if g.ConnID != c.ID {
 				continue
 			}
-			row := guestRow{Guest: g, Form: defaultForm(g), ServiceName: svcName[g.ServiceID]}
+			row := guestRow{Guest: g, Form: defaultForm(g, groups), ServiceName: svcName[g.ServiceID]}
 			if override != nil && override.GuestID == g.ID {
 				app := row.Form.App
 				row.Form = *override
@@ -350,8 +361,11 @@ func (s *Server) approveGuest(w http.ResponseWriter, r *http.Request, sess *sess
 		Name: r.PostFormValue("name"), Description: r.PostFormValue("description"), Icon: r.PostFormValue("icon"),
 		InternalURL: r.PostFormValue("internal_url"), ExternalURL: r.PostFormValue("external_url"),
 	}}
+	if gid, err := strconv.ParseInt(r.PostFormValue("group_id"), 10, 64); err == nil && gid > 0 {
+		form.GroupID = gid
+	}
 	var groupOK bool
-	form.Group, groupOK = store.CleanText(r.PostFormValue("group"), 80)
+	form.NewGroup, groupOK = store.CleanText(r.PostFormValue("new_group"), 80)
 	key := validateService(&form.Service)
 	if key == "" && !groupOK {
 		key = "err.name"
@@ -361,12 +375,15 @@ func (s *Server) approveGuest(w http.ResponseWriter, r *http.Request, sess *sess
 		return
 	}
 
-	gid, err := s.groupFor(ctx, form.Group)
-	if err != nil {
-		s.serverError(w, r, sess, err)
-		return
+	form.Service.GroupID = form.GroupID
+	if form.NewGroup != "" { // typing a name wins over the list; it is created when new
+		gid, err := s.groupFor(ctx, form.NewGroup)
+		if err != nil {
+			s.serverError(w, r, sess, err)
+			return
+		}
+		form.Service.GroupID = gid
 	}
-	form.Service.GroupID = gid
 	if err := s.st.SaveService(ctx, &form.Service); err != nil {
 		s.serverError(w, r, sess, err)
 		return

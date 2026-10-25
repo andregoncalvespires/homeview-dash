@@ -15,13 +15,13 @@
   {{if .User}}
   <nav aria-label="menu">
     {{if .User.IsAdmin}}
-    <a href="/admin/services">{{t .Lang "nav.services"}}</a>
-    <a href="/admin/groups">{{t .Lang "nav.groups"}}</a>
-    <a href="/admin/discovery">{{t .Lang "nav.discovery"}}</a>
-    <a href="/admin/users">{{t .Lang "nav.users"}}</a>
+    <a href="/admin/services"{{if eq .Path "/admin/services"}} aria-current="page"{{end}}>{{t .Lang "nav.services"}}</a>
+    <a href="/admin/groups"{{if eq .Path "/admin/groups"}} aria-current="page"{{end}}>{{t .Lang "nav.groups"}}</a>
+    <a href="/admin/discovery"{{if eq .Path "/admin/discovery"}} aria-current="page"{{end}}>{{t .Lang "nav.discovery"}}</a>
+    <a href="/admin/users"{{if eq .Path "/admin/users"}} aria-current="page"{{end}}>{{t .Lang "nav.users"}}</a>
     {{end}}
-    <a href="/settings">{{t .Lang "nav.settings"}}</a>
-    <a href="/devices">{{t .Lang "nav.devices"}}</a>
+    <a href="/settings"{{if eq .Path "/settings"}} aria-current="page"{{end}}>{{t .Lang "nav.settings"}}</a>
+    <a href="/devices"{{if eq .Path "/devices"}} aria-current="page"{{end}}>{{t .Lang "nav.devices"}}</a>
     <form method="post" action="/logout">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       <button class="linkbtn" type="submit">{{t .Lang "nav.logout"}} ({{.User.Name}})</button>

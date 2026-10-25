@@ -19,6 +19,7 @@
         {{range .Data.Groups}}<option value="{{.ID}}"{{if eq .ID $.Data.Edit.GroupID}} selected{{end}}>{{.Name}}</option>{{end}}
       </select>
     </label>
+    <label>{{t .Lang "f.newgroup"}}<input name="new_group" value="{{.Data.NewGroup}}" maxlength="80" placeholder="{{t .Lang "f.newgroup.ph"}}"><small class="muted">{{t .Lang "f.newgroup.help"}}</small></label>
     <label>{{t .Lang "f.internal"}}<input name="internal_url" value="{{.Data.Edit.InternalURL}}" placeholder="http://192.168.1.10:8123" maxlength="2048"></label>
     <label>{{t .Lang "f.external"}}<input name="external_url" value="{{.Data.Edit.ExternalURL}}" placeholder="https://ha.example.com" maxlength="2048"></label>
     <label>{{t .Lang "f.description"}}<input name="description" value="{{.Data.Edit.Description}}" maxlength="200"></label>

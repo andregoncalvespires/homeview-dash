@@ -131,7 +131,7 @@ func TestDiscoveryFlow(t *testing.T) {
 	// Approving without any URL is refused and keeps the form open with the input.
 	id100, id103, id104 := guestID(t, e, 100), guestID(t, e, 103), guestID(t, e, 104)
 	r, b = e.post(admin, "/admin/discovery/approve", url.Values{"csrf": {tok}, "id": {strconv.FormatInt(id103, 10)},
-		"name": {"Meu Docker"}, "group": {"pve1"}})
+		"name": {"Meu Docker"}, "new_group": {"pve1"}})
 	if r.StatusCode != 400 || !strings.Contains(b, "pelo menos uma URL") || !strings.Contains(b, `value="Meu Docker"`) || !strings.Contains(b, "<details class=\"approve\" open>") {
 		t.Errorf("approve without url: %d", r.StatusCode)
 	}
@@ -147,7 +147,7 @@ func TestDiscoveryFlow(t *testing.T) {
 	// Approve haos into the "pve1" group (created on the fly), then a second guest into the same one.
 	approve := func(id int64, name, internal, group string) *url.Values {
 		v := url.Values{"csrf": {tok}, "id": {strconv.FormatInt(id, 10)}, "name": {name}, "internal_url": {internal},
-			"external_url": {"https://ha.example.com"}, "group": {group}, "icon": {"🏠"}}
+			"external_url": {"https://ha.example.com"}, "new_group": {group}, "icon": {"🏠"}}
 		r, _ := e.post(admin, "/admin/discovery/approve", v)
 		if r.StatusCode != 303 || r.Header.Get("Location") != "/admin/discovery?ok=msg.guest_approved" {
 			t.Fatalf("approve %s: %d %q", name, r.StatusCode, r.Header.Get("Location"))
@@ -155,7 +155,7 @@ func TestDiscoveryFlow(t *testing.T) {
 		return &v
 	}
 	approve(id100, "Home Assistant", "http://192.168.1.10:8123", "pve1")
-	approve(id103, "Docker", "http://192.168.1.11:9000", "PVE1") // case-insensitive group match
+	approve(id103, "Docker", "http://192.168.1.11:9000", "PVE1") // typed name matches case-insensitively
 	groups, _ := e.st.ListGroups(ctx)
 	if len(groups) != 1 || groups[0].Name != "pve1" {
 		t.Fatalf("groups: %+v", groups)
@@ -314,5 +314,128 @@ func TestCatalogInServiceAndDiscoveryForms(t *testing.T) {
 	form.Set("icon", "app:does-not-exist")
 	if r, _ := e.post(admin, "/admin/services/save", form); r.StatusCode != 400 {
 		t.Errorf("unknown app icon accepted: %d", r.StatusCode)
+	}
+}
+
+func TestGroupPickingInBothForms(t *testing.T) {
+	e, f := discoveryEnv(t)
+	ctx := context.Background()
+	admin := e.login("admin@example.com")
+	tok := e.csrf(admin)
+	existing := &store.Group{Name: "pve1", Position: 1}
+	other := &store.Group{Name: "Media", Position: 2}
+	e.st.SaveGroup(ctx, existing)
+	e.st.SaveGroup(ctx, other)
+	e.post(admin, "/admin/connections/save", validConnForm(tok))
+
+	// Discovery: the list shows every existing group, and the one named like the
+	// node is preselected instead of proposing to create a duplicate.
+	_, b := e.get(admin, "/admin/discovery")
+	for _, g := range []*store.Group{existing, other} {
+		if !strings.Contains(b, `<option value="`+strconv.FormatInt(g.ID, 10)+`"`) {
+			t.Errorf("group %q missing from the list", g.Name)
+		}
+	}
+	if !strings.Contains(b, `<option value="`+strconv.FormatInt(existing.ID, 10)+`" selected>pve1`) {
+		t.Error("group named like the node is not preselected")
+	}
+	if !strings.Contains(b, `<label>Ou criar um novo grupo<input name="new_group" value="" `) {
+		t.Error("new-group field should start empty when the node group exists")
+	}
+	if strings.Contains(b, "<datalist") {
+		t.Error("the old free-text/datalist group field is still there")
+	}
+	// pve2 has no group yet: it proposes creating it.
+	if !strings.Contains(b, `name="new_group" value="pve2"`) {
+		t.Error("missing proposal to create the node's group")
+	}
+
+	// Picking an existing group from the list works.
+	id104 := guestID(t, e, 104)
+	r, _ := e.post(admin, "/admin/discovery/approve", url.Values{"csrf": {tok}, "id": {strconv.FormatInt(id104, 10)},
+		"name": {"Scratch"}, "internal_url": {"http://192.168.1.14:8080"}, "group_id": {strconv.FormatInt(other.ID, 10)}})
+	if r.StatusCode != 303 {
+		t.Fatalf("approve with listed group: %d", r.StatusCode)
+	}
+	if sv, _ := e.st.ListServices(ctx); len(sv) != 1 || sv[0].GroupID != other.ID {
+		t.Fatalf("service group: %+v", sv)
+	}
+	// A typed name wins over the list and creates the group.
+	id100 := guestID(t, e, 100)
+	e.post(admin, "/admin/discovery/approve", url.Values{"csrf": {tok}, "id": {strconv.FormatInt(id100, 10)},
+		"name": {"HA"}, "internal_url": {"http://192.168.1.10:8123"}, "group_id": {strconv.FormatInt(other.ID, 10)}, "new_group": {"Casa Inteligente"}})
+	groups, _ := e.st.ListGroups(ctx)
+	if len(groups) != 3 {
+		t.Fatalf("groups: %+v", groups)
+	}
+	sv, _ := e.st.ListServices(ctx)
+	var ha store.Service
+	for _, x := range sv {
+		if x.Name == "HA" {
+			ha = x
+		}
+	}
+	if g, _ := e.st.GetGroup(ctx, ha.GroupID); g == nil || g.Name != "Casa Inteligente" {
+		t.Errorf("typed group not used: %+v", ha)
+	}
+	// A validation error keeps what the admin picked/typed.
+	id103 := guestID(t, e, 103)
+	_, b = e.post(admin, "/admin/discovery/approve", url.Values{"csrf": {tok}, "id": {strconv.FormatInt(id103, 10)},
+		"name": {"Docker"}, "group_id": {strconv.FormatInt(other.ID, 10)}, "new_group": {"Rascunho"}})
+	if !strings.Contains(b, `name="new_group" value="Rascunho"`) || !strings.Contains(b, `value="`+strconv.FormatInt(other.ID, 10)+`" selected`) {
+		t.Error("form lost the group choice after an error")
+	}
+
+	// Services form: same pattern, and it can create a group on the fly.
+	_, b = e.get(admin, "/admin/services")
+	if !strings.Contains(b, `<select name="group_id"`) || !strings.Contains(b, `name="new_group"`) {
+		t.Error("services form lacks list + new group field")
+	}
+	form := url.Values{"csrf": {tok}, "name": {"Grafana"}, "internal_url": {"http://10.0.0.9:3000"}, "new_group": {"Monitoramento"}}
+	if r, _ := e.post(admin, "/admin/services/save", form); r.StatusCode != 303 {
+		t.Fatalf("service with new group: %d", r.StatusCode)
+	}
+	groups, _ = e.st.ListGroups(ctx)
+	var created *store.Group
+	for i := range groups {
+		if groups[i].Name == "Monitoramento" {
+			created = &groups[i]
+		}
+	}
+	if created == nil {
+		t.Fatalf("group not created: %+v", groups)
+	}
+	// Reusing the name (any case) does not duplicate it.
+	form.Set("name", "Prometheus")
+	form.Set("new_group", "monitoramento")
+	e.post(admin, "/admin/services/save", form)
+	if after, _ := e.st.ListGroups(ctx); len(after) != len(groups) {
+		t.Errorf("duplicate group created: %+v", after)
+	}
+	// Failure keeps the typed text; invalid text is refused.
+	form.Set("internal_url", "")
+	form.Set("external_url", "")
+	form.Set("new_group", "Meu Grupo")
+	if r, b := e.post(admin, "/admin/services/save", form); r.StatusCode != 400 || !strings.Contains(b, `name="new_group" value="Meu Grupo"`) {
+		t.Errorf("failed save lost the new group text: %d", r.StatusCode)
+	}
+	form.Set("internal_url", "http://a.example.com")
+	form.Set("new_group", "Ru\xc3im")
+	if r, _ := e.post(admin, "/admin/services/save", form); r.StatusCode != 400 {
+		t.Errorf("broken group name accepted: %d", r.StatusCode)
+	}
+	_ = f
+}
+
+func TestNavLinksAreMutedAndMarkCurrentPage(t *testing.T) {
+	e := newEnv(t)
+	admin := e.login("admin@example.com")
+	_, b := e.get(admin, "/admin/groups")
+	if !strings.Contains(b, `<a href="/admin/groups" aria-current="page">`) || strings.Contains(b, `<a href="/admin/users" aria-current`) {
+		t.Errorf("current page not marked:\n%s", b)
+	}
+	r, body := e.get(admin, "/static/app.css")
+	if r.StatusCode != 200 || !strings.Contains(body, ".top nav a { color: var(--muted); }") {
+		t.Error("nav links are not in the muted colour")
 	}
 }
