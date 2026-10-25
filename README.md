@@ -137,6 +137,26 @@ O HomeView **recusa** enviar credenciais por conexão sem criptografia.
 
 Encontrou uma falha? Abra uma *issue* sem detalhes exploráveis ou envie uma mensagem privada ao mantenedor.
 
+## Versões
+
+As versões são publicadas automaticamente, sem criar tags à mão. A fonte da verdade é o arquivo [`VERSION`](VERSION) na raiz do repositório.
+
+**Para publicar uma versão nova:**
+
+1. Altere o número em `VERSION` (por exemplo, `0.1.1`) no mesmo commit das mudanças, ou em um commit à parte. Na primeira publicação, crie o arquivo contendo apenas `0.1.0`.
+2. Faça push para a `main`.
+
+O workflow [`release.yml`](.github/workflows/release.yml) então:
+
+- lê o `VERSION` e, se a release `v<versão>` ainda não existir, cria a **tag** e a **release** no GitHub, com notas geradas a partir dos commits;
+- constrói e publica a **imagem Docker** (amd64 e arm64) em `ghcr.io/andregoncalvespires/homeview-dash` com as tags `<versão>`, `<major>.<minor>` e `latest`. Versões com sufixo, como `0.2.0-rc.1`, viram *pré-lançamento* e não movem `latest`.
+
+Se a release já existir, nada é recriado, então repetir o push é seguro. Para refazer só a imagem (por exemplo, se a construção falhou), use **Actions → Release → Run workflow**.
+
+> **Pré-requisito (uma vez):** em *Settings → Actions → General → Workflow permissions*, escolha **Read and write permissions**. Depois da primeira imagem publicada, torne o pacote público em *Packages → homeview-dash → Package settings*.
+>
+> A construção da imagem fica no mesmo workflow da release porque tags criadas pelo `GITHUB_TOKEN` não disparam outros workflows.
+
 ## Desenvolvimento
 
 Requer a versão do Go indicada em `go.mod` (atualmente 1.26).
