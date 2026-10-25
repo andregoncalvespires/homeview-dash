@@ -37,3 +37,17 @@ func TestCleanText(t *testing.T) {
 		t.Error("length is measured in bytes, not characters")
 	}
 }
+
+func TestNormalizeAccent(t *testing.T) {
+	ok := map[string]string{"": "", " #ABCDEF ": "#abcdef", "#00ff7f": "#00ff7f"}
+	for in, want := range ok {
+		if got, good := store.NormalizeAccent(in); !good || got != want {
+			t.Errorf("NormalizeAccent(%q) = %q, %v", in, got, good)
+		}
+	}
+	for _, in := range []string{"red", "#fff", "#12345g", "123456", "#1234567", "url(x)"} {
+		if _, good := store.NormalizeAccent(in); good {
+			t.Errorf("accepted %q", in)
+		}
+	}
+}

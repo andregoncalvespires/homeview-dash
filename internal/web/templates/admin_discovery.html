@@ -2,6 +2,7 @@
 {{/* args: dict-like via struct: .Row (guestRow), .Root (page) */}}
 <details class="approve"{{if .Row.Form.Open}} open{{end}}>
   <summary class="btn small primary">{{t .Root.Lang "disc.add"}}</summary>
+  {{with .Row.Form.App}}<p class="muted app-suggest"><img class="appicon" src="{{.IconURL}}" alt=""> {{t $.Root.Lang "disc.suggestion"}} <strong>{{.Name}}</strong>{{if .PortLabel}} · {{t $.Root.Lang "app.port"}} {{.PortLabel}}{{end}}</p>{{end}}
   <form method="post" action="/admin/discovery/approve" class="form grid2">
     <input type="hidden" name="csrf" value="{{.Root.CSRF}}"><input type="hidden" name="id" value="{{.Row.ID}}">
     <label>{{t .Root.Lang "f.name"}}<input name="name" value="{{.Row.Form.Service.Name}}" required maxlength="80"></label>
@@ -16,7 +17,7 @@
 {{end}}
 
 {{define "guestmeta"}}{{with .G}}
-<strong>{{.Name}}</strong>
+{{with .Form.App}}<img class="appicon" src="{{.IconURL}}" alt="" title="{{.Name}}">{{end}}<strong>{{.Name}}</strong>
 <small class="muted">{{if eq .Kind "lxc"}}LXC{{else}}VM{{end}} {{.VMID}} · {{.Node}}{{if .IP}} · {{.IP}}{{end}}</small>
 <span class="state {{if eq .Status "running"}}ok{{else}}off{{end}}">{{if eq .Status "running"}}{{t $.Lang "status.running"}}{{else if eq .Status "stopped"}}{{t $.Lang "status.stopped"}}{{else}}{{.Status}}{{end}}</span>
 {{end}}{{end}}

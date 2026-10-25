@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"html/template"
 	"io/fs"
@@ -31,7 +32,7 @@ const (
 
 // pageFiles are the templates rendered inside the shared layout.
 var pageFiles = []string{
-	"login", "verify", "dashboard", "devices",
+	"login", "verify", "dashboard", "devices", "settings",
 	"admin_services", "admin_groups", "admin_users", "admin_connections", "admin_discovery", "error",
 }
 
@@ -116,6 +117,12 @@ func (s *Server) Handler() http.Handler {
 	// Signed-in users.
 	mux.HandleFunc("GET /{$}", s.require(false, s.dashboard))
 	mux.HandleFunc("POST /logout", s.require(false, s.logout))
+	mux.HandleFunc("GET /settings", s.require(false, s.getSettings))
+	mux.HandleFunc("POST /settings/appearance", s.require(false, s.postAppearance))
+	mux.HandleFunc("POST /settings/background", s.requireLimit(false, uploadBodyBudget, s.postBackground))
+	mux.HandleFunc("POST /settings/background/delete", s.require(false, s.deleteBackground))
+	mux.HandleFunc("GET /me/theme.css", s.require(false, s.getThemeCSS))
+	mux.HandleFunc("GET /me/background", s.require(false, s.getBackground))
 	mux.HandleFunc("GET /devices", s.require(false, s.getDevices))
 	mux.HandleFunc("POST /devices/revoke", s.require(false, s.revokeDevice))
 
@@ -206,6 +213,11 @@ func (s *Server) session(r *http.Request) (*session, bool) {
 // require wraps a handler with authentication, optional admin check, request
 // size limits and CSRF validation for POSTs.
 func (s *Server) require(admin bool, h func(http.ResponseWriter, *http.Request, *session)) http.HandlerFunc {
+	return s.requireLimit(admin, 1<<20, h)
+}
+
+// requireLimit is require with a custom request body limit (uploads).
+func (s *Server) requireLimit(admin bool, limit int64, h func(http.ResponseWriter, *http.Request, *session)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		sess, ok := s.session(r)
 		if !ok {
@@ -218,8 +230,19 @@ func (s *Server) require(admin bool, h func(http.ResponseWriter, *http.Request, 
 			return
 		}
 		if r.Method == http.MethodPost {
-			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-			if err := r.ParseForm(); err != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, limit)
+			if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+				if err := r.ParseMultipartForm(1 << 20); err != nil {
+					var tooBig *http.MaxBytesError
+					if errors.As(err, &tooBig) {
+						s.renderError(w, r, sess, http.StatusRequestEntityTooLarge, "err.upload_size")
+					} else {
+						s.renderError(w, r, sess, http.StatusBadRequest, "err.badrequest")
+					}
+					return
+				}
+				defer r.MultipartForm.RemoveAll()
+			} else if err := r.ParseForm(); err != nil {
 				s.renderError(w, r, sess, http.StatusBadRequest, "err.badrequest")
 				return
 			}
@@ -250,6 +273,9 @@ type page struct {
 	Flash    string
 	FlashErr bool
 	Data     any
+	Theme    string // auto, light or dark
+	HasBg    bool
+	ThemeV   string // cache-busting version of /me/theme.css
 }
 
 func (s *Server) lang(r *http.Request) string {
@@ -265,9 +291,13 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, sess *session, n
 	if p.TitleKey != "" {
 		p.Title = i18n.T(p.Lang, p.TitleKey)
 	}
+	p.Theme = store.ThemeAuto
 	if sess != nil {
 		p.User = sess.User
 		p.CSRF = s.auth.CSRF(sess.Device)
+		if pr, err := s.st.GetPrefs(r.Context(), sess.User.ID); err == nil {
+			p.Theme, p.HasBg, p.ThemeV = pr.Theme, pr.HasBg, themeVersion(pr)
+		}
 	}
 	if p.Flash == "" { // one-shot messages travel as ?ok=key / ?err=key
 		if k := r.URL.Query().Get("ok"); strings.HasPrefix(k, "msg.") && i18n.Has(k) {

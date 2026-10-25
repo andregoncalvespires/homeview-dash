@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/andregoncalvespires/homeview-dash/internal/auth"
+	"github.com/andregoncalvespires/homeview-dash/internal/catalog"
 	"github.com/andregoncalvespires/homeview-dash/internal/i18n"
 	"github.com/andregoncalvespires/homeview-dash/internal/store"
 )
@@ -134,7 +135,6 @@ type serviceView struct {
 	Name, Description string
 	Primary           string
 	Secondary         string
-	PrimaryIsExternal bool
 	IconURL           string
 	IconText          string
 	Search            string
@@ -171,7 +171,6 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 		}
 	}
 	lang := s.lang(r)
-	internal := IsInternalHost(r.Host, s.cfg.InternalHosts)
 
 	byGroup := map[int64]*groupView{}
 	var ordered []*groupView
@@ -183,19 +182,21 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 	other := &groupView{Name: i18n.T(lang, "dash.ungrouped")}
 
 	for _, sv := range services {
-		l := ChooseLinks(sv, internal)
+		l := ChooseLinks(sv)
 		if l.Primary == "" {
 			continue
 		}
 		view := serviceView{
 			Name: sv.Name, Description: sv.Description,
-			Primary: l.Primary, Secondary: l.Secondary, PrimaryIsExternal: l.PrimaryIsExternal,
+			Primary: l.Primary, Secondary: l.Secondary,
 			Status: status[sv.ID],
 		}
 		low := strings.ToLower(sv.Icon)
-		if strings.HasPrefix(low, "http://") || strings.HasPrefix(low, "https://") {
+		if app, ok := catalog.FromIcon(sv.Icon); ok {
+			view.IconURL = app.IconURL()
+		} else if strings.HasPrefix(low, "http://") || strings.HasPrefix(low, "https://") {
 			view.IconURL = sv.Icon
-		} else {
+		} else if !strings.HasPrefix(sv.Icon, catalog.IconPrefix) { // a dangling "app:" ref shows the default icon
 			view.IconText = sv.Icon
 		}
 		target := other

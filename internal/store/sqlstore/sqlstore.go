@@ -22,10 +22,13 @@ var schemaV1 string
 //go:embed schema_v2.sql
 var schemaV2 string
 
+//go:embed schema_v3.sql
+var schemaV3 string
+
 const splitMarker = "-- +split"
 
 // migrations are applied in order; PRAGMA user_version records how many ran.
-var migrations = []string{schemaV1, schemaV2}
+var migrations = []string{schemaV1, schemaV2, schemaV3}
 
 // Store is the SQLite-backed store.
 type Store struct{ db *sql.DB }
@@ -668,4 +671,63 @@ func (s *Store) SetGuestState(ctx context.Context, id int64, state store.GuestSt
 
 func (s *Store) DeleteGuest(ctx context.Context, id int64) error {
 	return affected(s.db.ExecContext(ctx, `DELETE FROM guests WHERE id = ?`, id))
+}
+
+// ---- per-user appearance ----
+
+func (s *Store) GetPrefs(ctx context.Context, userID int64) (store.Prefs, error) {
+	p := store.DefaultPrefs(userID)
+	var hasBg int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT theme, accent, bg_dim, bg_type != '', bg_version FROM user_prefs WHERE user_id = ?`, userID).
+		Scan(&p.Theme, &p.Accent, &p.BgDim, &hasBg, &p.BgVersion)
+	if isNoRows(err) {
+		return p, nil
+	}
+	p.HasBg = hasBg != 0
+	return p, err
+}
+
+func (s *Store) SavePrefs(ctx context.Context, p store.Prefs) error {
+	if !store.ValidTheme(p.Theme) || p.BgDim < 0 || p.BgDim > 80 {
+		return fmt.Errorf("invalid preferences")
+	}
+	if _, ok := store.NormalizeAccent(p.Accent); !ok {
+		return fmt.Errorf("invalid accent colour")
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO user_prefs(user_id, theme, accent, bg_dim) VALUES(?, ?, ?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET theme = excluded.theme, accent = excluded.accent, bg_dim = excluded.bg_dim`,
+		p.UserID, p.Theme, p.Accent, p.BgDim)
+	if isFK(err) {
+		return store.ErrNotFound
+	}
+	return err
+}
+
+func (s *Store) GetBackground(ctx context.Context, userID int64) (string, []byte, error) {
+	var ctype string
+	var data []byte
+	err := s.db.QueryRowContext(ctx, `SELECT bg_type, bg_data FROM user_prefs WHERE user_id = ? AND bg_type != ''`, userID).
+		Scan(&ctype, &data)
+	if isNoRows(err) {
+		return "", nil, store.ErrNotFound
+	}
+	return ctype, data, err
+}
+
+func (s *Store) SetBackground(ctx context.Context, userID int64, contentType string, data []byte, at time.Time) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO user_prefs(user_id, bg_type, bg_data, bg_version) VALUES(?, ?, ?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET bg_type = excluded.bg_type, bg_data = excluded.bg_data, bg_version = excluded.bg_version`,
+		userID, contentType, data, at.UnixNano())
+	if isFK(err) {
+		return store.ErrNotFound
+	}
+	return err
+}
+
+func (s *Store) ClearBackground(ctx context.Context, userID int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE user_prefs SET bg_type = '', bg_data = NULL, bg_version = 0 WHERE user_id = ?`, userID)
+	return err
 }

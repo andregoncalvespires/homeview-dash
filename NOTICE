@@ -1,0 +1,13 @@
+HomeView
+Copyright (c) HomeView contributors. Licensed under the MIT License (see LICENSE).
+
+Third-party material bundled in the Docker image
+------------------------------------------------
+
+Application icons (internal/web/static/icons/)
+  Source:  https://github.com/homarr-labs/dashboard-icons
+  License: Apache License 2.0 (the collection). The icons themselves depict
+           logos and marks that are trademarks of their respective owners
+           (Home Assistant, Proxmox, Grafana, Docker, Debian, Ubuntu, etc.).
+           They are included only to identify the matching applications and
+           do not imply any endorsement of, or affiliation with, HomeView.

@@ -1,0 +1,52 @@
+{{define "content"}}
+<h1>{{t .Lang "settings.title"}}</h1>
+<p class="muted">{{t .Lang "settings.intro"}}</p>
+
+<section class="panel">
+  <h2>{{t .Lang "settings.look"}}</h2>
+  <form method="post" action="/settings/appearance" class="form">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <fieldset>
+      <legend>{{t .Lang "settings.theme"}}</legend>
+      <div class="choices">
+        <label class="choice"><input type="radio" name="theme" value="auto"{{if eq .Data.Prefs.Theme "auto"}} checked{{end}}> {{t .Lang "settings.theme.auto"}}</label>
+        <label class="choice"><input type="radio" name="theme" value="light"{{if eq .Data.Prefs.Theme "light"}} checked{{end}}> {{t .Lang "settings.theme.light"}}</label>
+        <label class="choice"><input type="radio" name="theme" value="dark"{{if eq .Data.Prefs.Theme "dark"}} checked{{end}}> {{t .Lang "settings.theme.dark"}}</label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>{{t .Lang "settings.accent"}}</legend>
+      <div class="choices">
+        <label class="choice"><input type="radio" name="accent_preset" value=""{{if eq .Data.Selected ""}} checked{{end}}> {{t .Lang "settings.accent.default"}}</label>
+        {{range .Data.Presets}}
+        <label class="choice sw" title="{{.Hex}}"><input type="radio" name="accent_preset" value="{{.ID}}"{{if eq $.Data.Selected .ID}} checked{{end}} aria-label="{{.ID}}"><span class="swatch sw-{{.ID}}"></span></label>
+        {{end}}
+        <label class="choice"><input type="radio" name="accent_preset" value="custom"{{if eq .Data.Selected "custom"}} checked{{end}}> {{t .Lang "settings.accent.custom"}}
+          <input type="color" name="accent_custom" value="{{.Data.Custom}}" aria-label="{{t .Lang "settings.accent.custom"}}"></label>
+      </div>
+    </fieldset>
+    <label>{{t .Lang "settings.dim"}}: <output>{{.Data.Prefs.BgDim}}</output>%
+      <input type="range" name="bg_dim" min="0" max="80" step="5" value="{{.Data.Prefs.BgDim}}">
+      <small class="muted">{{t .Lang "settings.dim.help"}}</small>
+    </label>
+    <div class="actions"><button class="btn primary" type="submit">{{t .Lang "f.save"}}</button></div>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>{{t .Lang "settings.bg"}}</h2>
+  <p class="muted">{{t .Lang "settings.bg.help"}}</p>
+  {{if .Data.BgURL}}<img class="bgprev" src="{{.Data.BgURL}}" alt="{{t .Lang "settings.bg"}}">{{end}}
+  <form method="post" action="/settings/background" enctype="multipart/form-data" class="form row">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <label>{{t .Lang "settings.bg.file"}}<input type="file" name="file" accept="image/png,image/jpeg,image/webp" required></label>
+    <button class="btn primary" type="submit">{{t .Lang "settings.bg.send"}}</button>
+  </form>
+  {{if .Data.BgURL}}
+  <form method="post" action="/settings/background/delete" class="inline">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <button class="btn danger" type="submit">{{t .Lang "settings.bg.remove"}}</button>
+  </form>
+  {{end}}
+</section>
+{{end}}

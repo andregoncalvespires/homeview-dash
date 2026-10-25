@@ -16,20 +16,21 @@ HomeView is a simple alternative to dashboards such as Heimdall and Homarr, buil
 - **Two addresses per service** (internal and external). The dashboard highlights the right one depending on whether you are at home or away, and shows the other as a shortcut.
 - **Portuguese and English UI**, light and dark themes, instant search (press `/`).
 
-### What works today (v0.2)
+### What works today (v0.3)
 
 - E-mail code sign-in + per-device cookie, with a "My devices" page to revoke access.
 - Administrator created from the console, **nothing written to `docker-compose.yml`**.
 - Users, groups and services (name, description, icon, internal URL, external URL, position).
 - One-time sign-in link from the console, as a recovery path if e-mail is down.
+- **34-application catalog** with icon and suggested port, **open in a new tab**, and **light/dark theme, accent colour and background image per user** (v0.3).
 - **Proxmox discovery** (v0.2): reads the VMs and LXCs of your server or cluster, you approve what goes on the dashboard, and a green/grey dot shows whether they are running.
 
 ### What comes next
 
 | Version | Delivery |
 |---|---|
-| v0.3 | Lightweight agent that lists each machine's Docker containers (optional `homeview.*` labels) |
-| v0.4 | YAML import/export, views by hierarchy/type, group permissions |
+| v0.4 | Lightweight agent that lists each machine's Docker containers (optional `homeview.*` labels) |
+| v0.5 | YAML import/export, views by hierarchy/type, group permissions |
 
 ## Install (3 steps)
 
@@ -69,7 +70,6 @@ Everything is set through environment variables, usually in the `.env` file.
 | `HOMEVIEW_BASE_URL` | `http://localhost:8080` | Public address of the dashboard. With `https://` the cookie gets the `Secure` flag. |
 | `HOMEVIEW_PORT` | `8080` | Host port published by the compose file. The container always listens on 8080. |
 | `HOMEVIEW_LANG` | `pt-BR` | Default language (`pt-BR` or `en`). Each user can switch it in the footer. |
-| `HOMEVIEW_INTERNAL_HOSTS` | *(empty)* | Extra host names meaning "I am on the local network", comma separated. |
 | `HOMEVIEW_DISCOVERY_INTERVAL` | `10m` | How often Proxmox connections are re-read (`30m`, `1h`…, minimum `1m`; `0` turns it off and leaves only the "Sync now" button). |
 | `HOMEVIEW_SMTP_HOST` | *(required)* | SMTP server. |
 | `HOMEVIEW_SMTP_PORT` | `587` | SMTP port. |
@@ -84,11 +84,28 @@ Everything is set through environment variables, usually in the `.env` file.
 
 Each service can have an **internal URL** (e.g. `http://192.168.1.10:8123`) and an **external URL** (e.g. `https://ha.example.com`).
 
-- If you open HomeView through a private IP, a single-label name, `*.lan`, `*.local` or a name listed in `HOMEVIEW_INTERNAL_HOSTS`, the main button is the **internal** one and the **external** link appears as a shortcut.
-- Through any other address (e.g. `https://dash.example.com`) it is the other way round.
-- A service with only one URL always uses it as the main button.
+- Clicking the card opens the **external** URL **in a new tab** when there is one, otherwise the internal one.
+- If the service has both, the card also shows an **Internal** tag that opens the internal URL (also in a new tab).
+- The address you used to open HomeView makes no difference.
 
-If you use split DNS with a "public-looking" name (e.g. `dash.home.example.com` pointing at a local IP), list it in `HOMEVIEW_INTERNAL_HOSTS`.
+> Up to v0.2 the main button depended on the address you were browsing from (local network or domain) and a `HOMEVIEW_INTERNAL_HOSTS` variable existed. It was removed; if it is still in your `.env` it is simply ignored.
+
+### Application catalog
+
+HomeView knows **Home Assistant, Zigbee2MQTT, ESPHome, EMQX, MQTT, MQTT Explorer, Proxmox, Portainer, Omada Controller, Code Server, Node-RED, Grafana, OpenMediaVault, Frigate, Matter, Immich, Jellyfin, Music Assistant, qBittorrent, OpenSpeedTest, FileBrowser, OpenWrt, Debian, Ubuntu, Docker, Podman, Cloudflare DDNS, Cloudflared, UniFi OS, WireGuard, Tailscale, AdGuard Home, Pi-hole and go2rtc**: an icon bundled in the image (no CDN, works offline) and the usual access port.
+
+- In the **Services** form, **Known application** fills in the icon (`app:home-assistant`) and, if you already typed only the IP in the internal URL (e.g. `http://192.168.1.10`), completes it with the default port (`:8123`).
+- In **Discovery**, the VM or LXC name is matched against the catalog (`HomeAssistant`, `pihole`, `frigate-nvr`…). When it is recognised, the URL and icon come pre-filled and the item shows the application's icon.
+- Ports and paths are **suggestions** (installations differ); check them before saving. Apps without a web UI (MQTT broker, Docker, Debian…) only bring the icon.
+- Icons come from [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) (Apache-2.0); the marks belong to their owners. See the `NOTICE` file.
+
+### Appearance (per user)
+
+Under **Appearance**, each person chooses, for their own account and on any device:
+
+- **Theme**: automatic (follow the device), light or dark.
+- **Accent colour**: eight presets or any other colour (the text on top switches between white and dark to keep contrast).
+- **Background image**: PNG, JPEG or WebP up to 3 MB, with a fade control to keep text readable. The image lives in the database (the `/data` volume), is only served to its owner, and SVG is not accepted.
 
 ### Proxmox discovery
 

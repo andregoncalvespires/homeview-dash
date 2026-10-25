@@ -1,74 +1,34 @@
 package web
 
 import (
-	"net"
-	"net/netip"
 	"net/url"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/andregoncalvespires/homeview-dash/internal/catalog"
 	"github.com/andregoncalvespires/homeview-dash/internal/store"
 )
 
 // Links is the result of choosing which URL of a service to emphasise.
 type Links struct {
-	Primary           string
-	Secondary         string
-	PrimaryIsExternal bool
+	Primary   string // opened by clicking the card
+	Secondary string // the internal URL, offered as a small "Internal" tag
 }
 
-// ChooseLinks picks the primary link. When the dashboard is opened from the
-// local network the internal URL is primary, otherwise the external one. If a
-// service only has one URL, that one is always primary and there is no
-// secondary link.
-func ChooseLinks(s store.Service, internalContext bool) Links {
+// ChooseLinks picks what a card links to: the external URL when there is one
+// (it works from anywhere), otherwise the internal URL. When both exist the
+// internal one stays reachable through the secondary tag.
+func ChooseLinks(s store.Service) Links {
 	in, ex := s.InternalURL, s.ExternalURL
 	switch {
-	case in == "" && ex == "":
-		return Links{}
-	case in == "":
-		return Links{Primary: ex, PrimaryIsExternal: true}
-	case ex == "":
-		return Links{Primary: in}
-	case internalContext:
-		return Links{Primary: in, Secondary: ex}
+	case ex != "" && in != "":
+		return Links{Primary: ex, Secondary: in}
+	case ex != "":
+		return Links{Primary: ex}
 	default:
-		return Links{Primary: ex, Secondary: in, PrimaryIsExternal: true}
+		return Links{Primary: in}
 	}
 }
-
-// IsInternalHost reports whether a request Host header (with or without port)
-// looks like local-network access: loopback/private/CGNAT addresses, single
-// label names, common local suffixes, or anything listed in extra.
-func IsInternalHost(hostport string, extra []string) bool {
-	host := strings.ToLower(strings.TrimSpace(hostport))
-	if h, _, err := net.SplitHostPort(host); err == nil {
-		host = h
-	}
-	host = strings.Trim(host, "[]")
-	if host == "" {
-		return false
-	}
-	for _, e := range extra {
-		if host == e {
-			return true
-		}
-	}
-	if ip, err := netip.ParseAddr(host); err == nil {
-		return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || cgnat.Contains(ip)
-	}
-	if !strings.Contains(host, ".") { // "homeview", "localhost"
-		return true
-	}
-	for _, suf := range []string{".local", ".lan", ".home", ".home.arpa", ".internal", ".localdomain", ".localhost"} {
-		if strings.HasSuffix(host, suf) {
-			return true
-		}
-	}
-	return false
-}
-
-var cgnat = netip.MustParsePrefix("100.64.0.0/10") // Tailscale and carrier-grade NAT
 
 // validHTTPURL accepts only absolute http(s) URLs with a host.
 func validHTTPURL(raw string) bool {
@@ -86,6 +46,10 @@ func validIcon(icon string) bool {
 	}
 	if !utf8.ValidString(icon) {
 		return false
+	}
+	if strings.HasPrefix(icon, catalog.IconPrefix) {
+		_, ok := catalog.FromIcon(icon)
+		return ok
 	}
 	low := strings.ToLower(icon)
 	if strings.HasPrefix(low, "http://") || strings.HasPrefix(low, "https://") {

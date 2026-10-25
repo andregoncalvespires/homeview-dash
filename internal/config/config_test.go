@@ -23,14 +23,13 @@ func TestDefaults(t *testing.T) {
 
 func TestFullConfig(t *testing.T) {
 	c, err := FromEnv(env(map[string]string{
-		"HOMEVIEW_BASE_URL":       "https://dash.example.com/",
-		"HOMEVIEW_LANG":           "en-US",
-		"HOMEVIEW_SMTP_HOST":      "smtp.example.com",
-		"HOMEVIEW_SMTP_PORT":      "465",
-		"HOMEVIEW_SMTP_SECURITY":  "TLS",
-		"HOMEVIEW_SMTP_USER":      "bot@example.com",
-		"HOMEVIEW_SMTP_PASS":      " secret ",
-		"HOMEVIEW_INTERNAL_HOSTS": "Dash.Casa.Example.com, , nas",
+		"HOMEVIEW_BASE_URL":      "https://dash.example.com/",
+		"HOMEVIEW_LANG":          "en-US",
+		"HOMEVIEW_SMTP_HOST":     "smtp.example.com",
+		"HOMEVIEW_SMTP_PORT":     "465",
+		"HOMEVIEW_SMTP_SECURITY": "TLS",
+		"HOMEVIEW_SMTP_USER":     "bot@example.com",
+		"HOMEVIEW_SMTP_PASS":     " secret ",
 	}))
 	if err != nil {
 		t.Fatal(err)
@@ -40,9 +39,6 @@ func TestFullConfig(t *testing.T) {
 	}
 	if c.SMTP.From != "bot@example.com" || c.SMTP.Pass != " secret " || c.SMTP.Security != "tls" || c.SMTP.Port != 465 {
 		t.Fatalf("smtp: %+v", c.SMTP)
-	}
-	if len(c.InternalHosts) != 2 || c.InternalHosts[0] != "dash.casa.example.com" || c.InternalHosts[1] != "nas" {
-		t.Fatalf("internal hosts: %v", c.InternalHosts)
 	}
 	if err := c.ValidateForServe(); err != nil {
 		t.Fatal(err)

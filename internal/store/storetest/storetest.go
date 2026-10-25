@@ -21,6 +21,7 @@ func Run(t *testing.T, newStore func(t *testing.T) store.Store) {
 	t.Run("devices", func(t *testing.T) { testDevices(t, newStore(t)) })
 	t.Run("groups and services", func(t *testing.T) { testCatalog(t, newStore(t)) })
 	t.Run("discovery", func(t *testing.T) { testDiscovery(t, newStore(t)) })
+	t.Run("preferences", func(t *testing.T) { testPrefs(t, newStore(t)) })
 }
 
 var ctx = context.Background()
@@ -376,4 +377,80 @@ func testDiscovery(t *testing.T, s store.Store) {
 	}
 	_, err = s.GetConnection(ctx, c.ID)
 	isErr(t, err, store.ErrNotFound)
+}
+
+func testPrefs(t *testing.T, s store.Store) {
+	u, err := s.CreateUser(ctx, "a@example.com", "Ann", store.RoleUser)
+	must(t, err)
+
+	// Defaults until something is saved.
+	p, err := s.GetPrefs(ctx, u.ID)
+	must(t, err)
+	if p != store.DefaultPrefs(u.ID) || p.Theme != "auto" || p.BgDim != store.DefaultBgDim || p.HasBg {
+		t.Fatalf("defaults = %+v", p)
+	}
+	if _, _, err := s.GetBackground(ctx, u.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("background before upload: %v", err)
+	}
+
+	must(t, s.SavePrefs(ctx, store.Prefs{UserID: u.ID, Theme: "dark", Accent: "#7c3aed", BgDim: 50}))
+	p, _ = s.GetPrefs(ctx, u.ID)
+	if p.Theme != "dark" || p.Accent != "#7c3aed" || p.BgDim != 50 || p.HasBg {
+		t.Fatalf("saved = %+v", p)
+	}
+	isErr(t, s.SavePrefs(ctx, store.Prefs{UserID: 9999, Theme: "dark", BgDim: 10}), store.ErrNotFound)
+	if err := s.SavePrefs(ctx, store.Prefs{UserID: u.ID, Theme: "neon", BgDim: 10}); err == nil {
+		t.Error("invalid theme accepted")
+	}
+	if err := s.SavePrefs(ctx, store.Prefs{UserID: u.ID, Theme: "dark", Accent: "red", BgDim: 10}); err == nil {
+		t.Error("invalid accent accepted")
+	}
+	if err := s.SavePrefs(ctx, store.Prefs{UserID: u.ID, Theme: "dark", BgDim: 95}); err == nil {
+		t.Error("out-of-range dim accepted")
+	}
+
+	// Background: stored as given, saving other prefs keeps it, clearing keeps the rest.
+	at := time.Now()
+	img := []byte{0x89, 'P', 'N', 'G', 1, 2, 3, 0, 255}
+	must(t, s.SetBackground(ctx, u.ID, "image/png", img, at))
+	isErr(t, s.SetBackground(ctx, 9999, "image/png", img, at), store.ErrNotFound)
+	ct, data, err := s.GetBackground(ctx, u.ID)
+	must(t, err)
+	if ct != "image/png" || string(data) != string(img) {
+		t.Fatalf("background = %q %v", ct, data)
+	}
+	p, _ = s.GetPrefs(ctx, u.ID)
+	if !p.HasBg || p.BgVersion != at.UnixNano() || p.Theme != "dark" {
+		t.Fatalf("after upload = %+v", p)
+	}
+	must(t, s.SavePrefs(ctx, store.Prefs{UserID: u.ID, Theme: "light", BgDim: 20}))
+	if _, d, err := s.GetBackground(ctx, u.ID); err != nil || len(d) != len(img) {
+		t.Fatalf("SavePrefs lost the background: %v", err)
+	}
+	must(t, s.SetBackground(ctx, u.ID, "image/jpeg", []byte{0xff, 0xd8, 0xff}, at.Add(time.Second)))
+	if ct, _, _ := s.GetBackground(ctx, u.ID); ct != "image/jpeg" {
+		t.Fatalf("replace: %q", ct)
+	}
+	must(t, s.ClearBackground(ctx, u.ID))
+	must(t, s.ClearBackground(ctx, u.ID)) // idempotent
+	must(t, s.ClearBackground(ctx, 9999)) // unknown user: nothing to do
+	if _, _, err := s.GetBackground(ctx, u.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("background after clear: %v", err)
+	}
+	if p, _ = s.GetPrefs(ctx, u.ID); p.HasBg || p.Theme != "light" || p.BgDim != 20 {
+		t.Fatalf("after clear = %+v", p)
+	}
+
+	// A background can be the very first thing a user sets.
+	u2, _ := s.CreateUser(ctx, "b@example.com", "Bob", store.RoleUser)
+	must(t, s.SetBackground(ctx, u2.ID, "image/webp", []byte("RIFFxxxxWEBP"), at))
+	if p, _ = s.GetPrefs(ctx, u2.ID); !p.HasBg || p.Theme != "auto" || p.BgDim != store.DefaultBgDim {
+		t.Fatalf("first-write defaults = %+v", p)
+	}
+
+	// Deleting the user deletes their preferences.
+	must(t, s.DeleteUser(ctx, u2.ID))
+	if _, _, err := s.GetBackground(ctx, u2.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("background survived the user: %v", err)
+	}
 }

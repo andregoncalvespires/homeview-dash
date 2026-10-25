@@ -20,10 +20,6 @@ type Config struct {
 	BaseURL      string // public URL, used in CLI login links
 	DefaultLang  string // "pt-BR" or "en"
 	CookieSecure bool   // set the Secure flag on the device cookie
-	// InternalHosts are extra host names that mean "the user is on the local
-	// network" (besides private IPs and *.lan/*.local names), e.g. a split-DNS
-	// name like dash.casa.example.com.
-	InternalHosts []string
 	// DiscoveryInterval is how often Proxmox connections are re-read in the
 	// background. Zero disables the loop (the "Sync now" button still works).
 	DiscoveryInterval time.Duration
@@ -79,11 +75,6 @@ func FromEnv(getenv func(string) string) (Config, error) {
 	case mail.StartTLS, mail.TLS, mail.None:
 	default:
 		return c, fmt.Errorf("HOMEVIEW_SMTP_SECURITY must be starttls, tls or none, got %q", sec)
-	}
-	for _, h := range strings.Split(getenv("HOMEVIEW_INTERNAL_HOSTS"), ",") {
-		if h = strings.ToLower(strings.TrimSpace(h)); h != "" {
-			c.InternalHosts = append(c.InternalHosts, h)
-		}
 	}
 	c.SMTP = mail.SMTP{
 		Host:     get("HOMEVIEW_SMTP_HOST", ""),

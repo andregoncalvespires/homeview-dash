@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/andregoncalvespires/homeview-dash/internal/catalog"
 	"github.com/andregoncalvespires/homeview-dash/internal/store"
 )
 
@@ -36,6 +37,7 @@ type adminServicesData struct {
 	Edit   store.Service
 	Groups []store.Group
 	Rows   []serviceRow
+	Apps   []catalog.App // catalog entries for the "application" picker
 }
 
 func (s *Server) loadServicesPage(r *http.Request, edit store.Service) (adminServicesData, error) {
@@ -51,7 +53,7 @@ func (s *Server) loadServicesPage(r *http.Request, edit store.Service) (adminSer
 	for _, g := range groups {
 		names[g.ID] = g.Name
 	}
-	data := adminServicesData{Edit: edit, Groups: groups}
+	data := adminServicesData{Edit: edit, Groups: groups, Apps: catalog.All()}
 	for _, sv := range services {
 		data.Rows = append(data.Rows, serviceRow{Service: sv, GroupName: names[sv.GroupID]})
 	}

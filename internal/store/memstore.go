@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"sync"
@@ -21,6 +22,13 @@ type MemStore struct {
 	services map[int64]*Service
 	conns    map[int64]*Connection
 	guests   map[int64]*Guest
+	prefs    map[int64]*prefsRow
+}
+
+type prefsRow struct {
+	Prefs
+	bgType string
+	bgData []byte
 }
 
 type linkToken struct {
@@ -45,6 +53,7 @@ func NewMemStore() *MemStore {
 		services: map[int64]*Service{},
 		conns:    map[int64]*Connection{},
 		guests:   map[int64]*Guest{},
+		prefs:    map[int64]*prefsRow{},
 	}
 }
 
@@ -135,6 +144,7 @@ func (m *MemStore) DeleteUser(_ context.Context, id int64) error {
 		return ErrNotFound
 	}
 	delete(m.users, id)
+	delete(m.prefs, id)
 	delete(m.codes, id)
 	for h, l := range m.links {
 		if l.userID == id {
@@ -543,6 +553,71 @@ func (m *MemStore) DeleteGuest(_ context.Context, id int64) error {
 		return ErrNotFound
 	}
 	delete(m.guests, id)
+	return nil
+}
+
+func (m *MemStore) prefsFor(userID int64) *prefsRow {
+	r, ok := m.prefs[userID]
+	if !ok {
+		r = &prefsRow{Prefs: DefaultPrefs(userID)}
+		m.prefs[userID] = r
+	}
+	return r
+}
+
+func (m *MemStore) GetPrefs(_ context.Context, userID int64) (Prefs, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if r, ok := m.prefs[userID]; ok {
+		return r.Prefs, nil
+	}
+	return DefaultPrefs(userID), nil
+}
+
+func (m *MemStore) SavePrefs(_ context.Context, p Prefs) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.users[p.UserID]; !ok {
+		return ErrNotFound
+	}
+	if !ValidTheme(p.Theme) || p.BgDim < 0 || p.BgDim > 80 {
+		return errors.New("store: invalid preferences")
+	}
+	if _, ok := NormalizeAccent(p.Accent); !ok {
+		return errors.New("store: invalid accent colour")
+	}
+	r := m.prefsFor(p.UserID)
+	r.Theme, r.Accent, r.BgDim = p.Theme, p.Accent, p.BgDim
+	return nil
+}
+
+func (m *MemStore) GetBackground(_ context.Context, userID int64) (string, []byte, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.prefs[userID]
+	if !ok || !r.HasBg {
+		return "", nil, ErrNotFound
+	}
+	return r.bgType, append([]byte(nil), r.bgData...), nil
+}
+
+func (m *MemStore) SetBackground(_ context.Context, userID int64, contentType string, data []byte, at time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.users[userID]; !ok {
+		return ErrNotFound
+	}
+	r := m.prefsFor(userID)
+	r.HasBg, r.bgType, r.bgData, r.BgVersion = true, contentType, append([]byte(nil), data...), at.UnixNano()
+	return nil
+}
+
+func (m *MemStore) ClearBackground(_ context.Context, userID int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if r, ok := m.prefs[userID]; ok {
+		r.HasBg, r.bgType, r.bgData, r.BgVersion = false, "", nil, 0
+	}
 	return nil
 }
 

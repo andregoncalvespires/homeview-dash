@@ -127,6 +127,51 @@ type Guest struct {
 	LastSeen  time.Time
 }
 
+// Theme values for Prefs.Theme.
+const (
+	ThemeAuto  = "auto" // follow the operating system
+	ThemeLight = "light"
+	ThemeDark  = "dark"
+)
+
+// DefaultBgDim is how strongly the page colour is laid over a background image.
+const DefaultBgDim = 35
+
+// Prefs are one user's appearance settings.
+type Prefs struct {
+	UserID    int64
+	Theme     string // ThemeAuto, ThemeLight or ThemeDark
+	Accent    string // "" (default) or "#rrggbb"
+	BgDim     int    // 0..80, percent of page colour over the image
+	HasBg     bool
+	BgVersion int64 // changes whenever the image does (cache busting)
+}
+
+// DefaultPrefs are used until a user changes something.
+func DefaultPrefs(userID int64) Prefs {
+	return Prefs{UserID: userID, Theme: ThemeAuto, BgDim: DefaultBgDim}
+}
+
+// ValidTheme reports whether t is a known theme.
+func ValidTheme(t string) bool { return t == ThemeAuto || t == ThemeLight || t == ThemeDark }
+
+// NormalizeAccent accepts "" or a #rrggbb colour and returns it lower-cased.
+func NormalizeAccent(s string) (string, bool) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" {
+		return "", true
+	}
+	if len(s) != 7 || s[0] != '#' {
+		return "", false
+	}
+	for _, c := range s[1:] {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return "", false
+		}
+	}
+	return s, true
+}
+
 // Store is the persistence interface used by the rest of the application.
 type Store interface {
 	Close() error
@@ -173,6 +218,15 @@ type Store interface {
 	SaveService(ctx context.Context, s *Service) error // insert when ID == 0
 	// DeleteService also sends the guest that produced it back to GuestNew.
 	DeleteService(ctx context.Context, id int64) error
+
+	// Per-user appearance. GetPrefs never fails for a missing row: it returns
+	// DefaultPrefs. The writes return ErrNotFound when the user does not exist.
+	GetPrefs(ctx context.Context, userID int64) (Prefs, error)
+	SavePrefs(ctx context.Context, p Prefs) error // theme, accent and dim only
+	// GetBackground returns the stored image or ErrNotFound.
+	GetBackground(ctx context.Context, userID int64) (contentType string, data []byte, err error)
+	SetBackground(ctx context.Context, userID int64, contentType string, data []byte, at time.Time) error
+	ClearBackground(ctx context.Context, userID int64) error
 
 	// Discovery connections.
 	ListConnections(ctx context.Context) ([]Connection, error)

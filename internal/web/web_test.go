@@ -387,18 +387,18 @@ func TestAdminManagesCatalog(t *testing.T) {
 		t.Fatalf("services: %+v", list)
 	}
 
-	// From the local network the internal URL is primary...
-	_, b := e.get(admin, "/", "Host", "192.168.1.20:8080")
-	if !strings.Contains(b, `class="card-main" href="http://10.0.0.5:5000"`) || !strings.Contains(b, `class="chip" href="https://frigate.example.com"`) {
-		t.Errorf("internal context links wrong:\n%s", b)
-	}
-	if !strings.Contains(b, "Proxmox › Docker01") || !strings.Contains(b, "📹") {
-		t.Error("group/icon not rendered")
-	}
-	// ...and from the public domain the external URL is primary.
-	_, b = e.get(admin, "/", "Host", "dash.example.com")
-	if !strings.Contains(b, `class="card-main" href="https://frigate.example.com"`) || !strings.Contains(b, `class="chip" href="http://10.0.0.5:5000"`) {
-		t.Errorf("external context links wrong:\n%s", b)
+	// The card opens the external URL in a new tab; the internal one is a tag.
+	// The address the dashboard itself was reached by makes no difference.
+	for _, host := range []string{"192.168.1.20:8080", "dash.example.com"} {
+		_, b := e.get(admin, "/", "Host", host)
+		if !strings.Contains(b, `class="card-main" href="https://frigate.example.com" target="_blank" rel="noopener noreferrer"`) ||
+			!strings.Contains(b, `class="chip" href="http://10.0.0.5:5000" target="_blank" rel="noopener noreferrer">Interno</a>`) ||
+			strings.Contains(b, ">Externo<") {
+			t.Errorf("links wrong for Host %s:\n%s", host, b)
+		}
+		if !strings.Contains(b, "Proxmox › Docker01") || !strings.Contains(b, "📹") {
+			t.Error("group/icon not rendered")
+		}
 	}
 
 	// Edit page is prefilled; edit and delete work.
@@ -596,36 +596,17 @@ func TestSafeNext(t *testing.T) {
 
 func TestChooseLinks(t *testing.T) {
 	both := store.Service{InternalURL: "http://in", ExternalURL: "https://ex"}
-	if l := ChooseLinks(both, true); l.Primary != "http://in" || l.Secondary != "https://ex" || l.PrimaryIsExternal {
-		t.Errorf("internal ctx: %+v", l)
+	if l := ChooseLinks(both); l.Primary != "https://ex" || l.Secondary != "http://in" {
+		t.Errorf("both: %+v", l)
 	}
-	if l := ChooseLinks(both, false); l.Primary != "https://ex" || l.Secondary != "http://in" || !l.PrimaryIsExternal {
-		t.Errorf("external ctx: %+v", l)
-	}
-	if l := ChooseLinks(store.Service{ExternalURL: "https://ex"}, true); l.Primary != "https://ex" || l.Secondary != "" || !l.PrimaryIsExternal {
+	if l := ChooseLinks(store.Service{ExternalURL: "https://ex"}); l.Primary != "https://ex" || l.Secondary != "" {
 		t.Errorf("only external: %+v", l)
 	}
-	if l := ChooseLinks(store.Service{InternalURL: "http://in"}, false); l.Primary != "http://in" || l.Secondary != "" || l.PrimaryIsExternal {
+	if l := ChooseLinks(store.Service{InternalURL: "http://in"}); l.Primary != "http://in" || l.Secondary != "" {
 		t.Errorf("only internal: %+v", l)
 	}
-	if l := ChooseLinks(store.Service{}, true); l.Primary != "" {
+	if l := ChooseLinks(store.Service{}); l.Primary != "" || l.Secondary != "" {
 		t.Errorf("no urls: %+v", l)
-	}
-}
-
-func TestIsInternalHost(t *testing.T) {
-	yes := []string{"192.168.1.10:8080", "10.0.0.5", "172.16.3.4:80", "127.0.0.1:8080", "localhost:8080", "[::1]:8080",
-		"homeview", "dash.lan", "nas.local:80", "x.home.arpa", "100.100.1.2", "169.254.1.1", "dash.casa.example.com"}
-	no := []string{"dash.example.com", "dash.example.com:443", "8.8.8.8", "203.0.113.9:80", "", "172.32.0.1"}
-	for _, h := range yes {
-		if !IsInternalHost(h, []string{"dash.casa.example.com"}) {
-			t.Errorf("%q should be internal", h)
-		}
-	}
-	for _, h := range no {
-		if IsInternalHost(h, []string{"dash.casa.example.com"}) {
-			t.Errorf("%q should be external", h)
-		}
 	}
 }
 

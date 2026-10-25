@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andregoncalvespires/homeview-dash/internal/catalog"
 	"github.com/andregoncalvespires/homeview-dash/internal/discovery"
 	"github.com/andregoncalvespires/homeview-dash/internal/store"
 )
@@ -158,8 +159,9 @@ func (s *Server) deleteConnection(w http.ResponseWriter, r *http.Request, sess *
 type approveForm struct {
 	GuestID int64
 	Service store.Service
-	Group   string // group name; reused when it exists, created otherwise
-	Open    bool   // render the <details> expanded (after a validation error)
+	Group   string       // group name; reused when it exists, created otherwise
+	Open    bool         // render the <details> expanded (after a validation error)
+	App     *catalog.App // catalog entry recognised from the guest name, if any
 }
 
 type guestRow struct {
@@ -185,13 +187,18 @@ type discoveryData struct {
 func defaultForm(g store.Guest) approveForm {
 	f := approveForm{GuestID: g.ID, Group: g.Node}
 	f.Service.Name = g.Name
-	if g.IP != "" {
-		f.Service.InternalURL = "http://" + g.IP
-	}
 	if g.Kind == "lxc" {
 		f.Service.Icon = "📦"
 	} else {
 		f.Service.Icon = "🖥️"
+	}
+	if app, ok := catalog.Match(g.Name); ok {
+		f.App = &app
+		f.Service.Icon = app.IconRef()
+		f.Service.InternalURL = app.SuggestedURL(g.IP)
+	}
+	if f.Service.InternalURL == "" && g.IP != "" {
+		f.Service.InternalURL = "http://" + g.IP
 	}
 	return f
 }
@@ -227,7 +234,9 @@ func (s *Server) loadDiscovery(r *http.Request, override *approveForm) (discover
 			}
 			row := guestRow{Guest: g, Form: defaultForm(g), ServiceName: svcName[g.ServiceID]}
 			if override != nil && override.GuestID == g.ID {
+				app := row.Form.App
 				row.Form = *override
+				row.Form.App = app
 			}
 			switch {
 			case g.State == store.GuestApproved:

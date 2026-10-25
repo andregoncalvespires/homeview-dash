@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/andregoncalvespires/homeview-dash/internal/catalog"
 	"github.com/andregoncalvespires/homeview-dash/internal/discovery"
 	"github.com/andregoncalvespires/homeview-dash/internal/proxmox"
 	"github.com/andregoncalvespires/homeview-dash/internal/store"
@@ -252,5 +253,66 @@ func TestDiscoveryFlow(t *testing.T) {
 	}
 	if sv, _ := e.st.ListServices(ctx); len(sv) != 1 {
 		t.Errorf("services after connection delete: %+v", sv)
+	}
+}
+
+func TestCatalogIconsAreEmbedded(t *testing.T) {
+	for _, a := range catalog.All() {
+		b, err := assets.ReadFile("static/icons/" + a.File)
+		if err != nil || len(b) < 100 {
+			t.Errorf("%s: icon %s missing from the embedded files (%v)", a.ID, a.File, err)
+		}
+	}
+}
+
+func TestCatalogInServiceAndDiscoveryForms(t *testing.T) {
+	e, f := discoveryEnv(t)
+	f.guests = []proxmox.Guest{
+		{VMID: 100, Kind: "qemu", Name: "HomeAssistant", Node: "pve1", Status: "running", IP: "192.168.1.10"},
+		{VMID: 101, Kind: "lxc", Name: "pihole", Node: "pve1", Status: "running", IP: "192.168.1.2"},
+		{VMID: 102, Kind: "lxc", Name: "scratch", Node: "pve1", Status: "running", IP: "192.168.1.3"},
+	}
+	ctx := context.Background()
+	admin := e.login("admin@example.com")
+	tok := e.csrf(admin)
+	e.post(admin, "/admin/connections/save", validConnForm(tok))
+
+	// Recognised guests get icon + usual port; unknown ones keep the plain default.
+	_, b := e.get(admin, "/admin/discovery")
+	for _, want := range []string{
+		`value="http://192.168.1.10:8123"`, `value="app:home-assistant"`, "Reconhecido como",
+		`value="http://192.168.1.2/admin"`, `value="app:pi-hole"`, `src="/static/icons/pi-hole.svg"`,
+		`value="http://192.168.1.3"`, `value="📦"`,
+	} {
+		if !strings.Contains(b, want) {
+			t.Errorf("discovery page lacks %q", want)
+		}
+	}
+
+	// The service form offers the catalog and keeps the selection when editing.
+	_, b = e.get(admin, "/admin/services")
+	for _, want := range []string{`<select id="app-model"`, `value="grafana"`, `data-port="3000"`, `value="zigbee2mqtt"`} {
+		if !strings.Contains(b, want) {
+			t.Errorf("services form lacks %q", want)
+		}
+	}
+	form := url.Values{"csrf": {tok}, "name": {"Grafana"}, "icon": {"app:grafana"}, "internal_url": {"http://10.0.0.9:3000"}}
+	if r, _ := e.post(admin, "/admin/services/save", form); r.StatusCode != 303 {
+		t.Fatalf("save with app icon: %d", r.StatusCode)
+	}
+	list, _ := e.st.ListServices(ctx)
+	_, b = e.get(admin, "/admin/services?edit="+strconv.FormatInt(list[0].ID, 10))
+	if !strings.Contains(b, `value="grafana" data-name="Grafana"`) || !strings.Contains(b, " selected>Grafana") {
+		t.Errorf("edit form does not preselect the application:\n%s", b)
+	}
+	// ...and the dashboard shows the embedded icon, never the raw reference.
+	_, b = e.get(admin, "/")
+	if !strings.Contains(b, `src="/static/icons/grafana.svg"`) || strings.Contains(b, "app:grafana") {
+		t.Errorf("dashboard icon:\n%s", b)
+	}
+	// Unknown catalog references are rejected.
+	form.Set("icon", "app:does-not-exist")
+	if r, _ := e.post(admin, "/admin/services/save", form); r.StatusCode != 400 {
+		t.Errorf("unknown app icon accepted: %d", r.StatusCode)
 	}
 }
