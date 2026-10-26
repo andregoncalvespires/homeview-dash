@@ -243,6 +243,13 @@ type Store interface {
 	// GetBackground returns the stored image or ErrNotFound.
 	GetBackground(ctx context.Context, userID int64) (contentType string, data []byte, err error)
 	SetBackground(ctx context.Context, userID int64, contentType string, data []byte, at time.Time) error
+	// Uploaded service icons are kept in the database. Identical images share
+	// one row (SaveIcon returns the existing id); the caller deletes an icon
+	// once no service uses it any more.
+	SaveIcon(ctx context.Context, contentType string, data []byte, at time.Time) (int64, error)
+	GetIcon(ctx context.Context, id int64) (contentType string, data []byte, err error)
+	DeleteIcon(ctx context.Context, id int64) error
+
 	// ClearBackground removes an uploaded image (and any bundled wallpaper).
 	ClearBackground(ctx context.Context, userID int64) error
 	// SetBgPreset picks a bundled wallpaper ("" for none) and drops any upload.

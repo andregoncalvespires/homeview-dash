@@ -3,7 +3,7 @@
 <details class="approve"{{if .Row.Form.Open}} open{{end}}>
   <summary class="btn small primary">{{if .Row.Services}}{{t .Root.Lang "disc.add_more"}}{{else}}{{t .Root.Lang "disc.add"}}{{end}}</summary>
   {{with .Row.Form.App}}<p class="muted app-suggest"><img class="appicon" src="{{.IconURL}}" alt=""> {{t $.Root.Lang "disc.suggestion"}} <strong>{{.Name}}</strong>{{if .PortLabel}} · {{t $.Root.Lang "app.port"}} {{.PortLabel}}{{end}}</p>{{end}}
-  <form method="post" action="/admin/discovery/approve" class="form grid2" data-appform data-addr="{{.Row.IP}}">
+  <form method="post" action="/admin/discovery/approve" class="form grid2" data-appform data-addr="{{.Row.IP}}" enctype="multipart/form-data">
     <input type="hidden" name="csrf" value="{{.Root.CSRF}}"><input type="hidden" name="id" value="{{.Row.ID}}">
     <label>{{t .Root.Lang "f.app"}}
       <select class="app-model" data-port-prefix="{{t .Root.Lang "app.port"}}">
@@ -24,6 +24,7 @@
     <label>{{t .Root.Lang "f.external"}}<input name="external_url" value="{{.Row.Form.Service.ExternalURL}}" placeholder="https://app.example.com" maxlength="2048"></label>
     <label>{{t .Root.Lang "f.description"}}<input name="description" value="{{.Row.Form.Service.Description}}" maxlength="200"></label>
     <label>{{t .Root.Lang "f.icon"}}<input name="icon" value="{{.Row.Form.Service.Icon}}" maxlength="2048"></label>
+    <label>{{t .Root.Lang "f.iconfile"}}<input type="file" name="icon_file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"></label>
     <div class="actions"><button class="btn primary" type="submit">{{t .Root.Lang "disc.approve"}}</button></div>
   </form>
 </details>

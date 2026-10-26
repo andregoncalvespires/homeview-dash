@@ -382,7 +382,27 @@ func (s *Server) approveGuest(w http.ResponseWriter, r *http.Request, sess *sess
 	}
 	var groupOK bool
 	form.NewGroup, groupOK = store.CleanText(r.PostFormValue("new_group"), 80)
-	key := validateService(&form.Service)
+	uploaded, upKey, upErr := s.iconFromUpload(r)
+	if upErr != nil {
+		s.serverError(w, r, sess, upErr)
+		return
+	}
+	saved := false
+	defer func() {
+		if !saved && uploaded != "" {
+			s.pruneIcon(context.WithoutCancel(ctx), uploaded)
+		}
+	}()
+	if uploaded != "" {
+		form.Service.Icon = uploaded
+	}
+	key := upKey
+	if key == "" {
+		key = validateService(&form.Service)
+	}
+	if key == "" && strings.HasPrefix(form.Service.Icon, uploadIconPrefix) && !s.iconExists(ctx, form.Service.Icon) {
+		key = "err.icon_gone"
+	}
 	if key == "" && !groupOK {
 		key = "err.name"
 	}
@@ -408,6 +428,7 @@ func (s *Server) approveGuest(w http.ResponseWriter, r *http.Request, sess *sess
 		s.serverError(w, r, sess, err)
 		return
 	}
+	saved = true
 	if g.State == store.GuestIgnored { // adding a service means it is wanted
 		if err := s.st.SetGuestState(ctx, id, store.GuestNew); err != nil && !errors.Is(err, store.ErrNotFound) {
 			s.serverError(w, r, sess, err)

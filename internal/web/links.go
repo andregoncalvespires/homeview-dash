@@ -51,6 +51,10 @@ func validIcon(icon string) bool {
 		_, ok := catalog.FromIcon(icon)
 		return ok
 	}
+	if strings.HasPrefix(icon, uploadIconPrefix) {
+		_, ok := uploadIconID(icon) // that the image exists is checked where the store is at hand
+		return ok
+	}
 	low := strings.ToLower(icon)
 	if strings.HasPrefix(low, "http://") || strings.HasPrefix(low, "https://") {
 		return validHTTPURL(icon)

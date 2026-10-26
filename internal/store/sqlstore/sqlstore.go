@@ -4,8 +4,10 @@ package sqlstore
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	_ "embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -34,10 +36,13 @@ var schemaV5 string
 //go:embed schema_v6.sql
 var schemaV6 string
 
+//go:embed schema_v7.sql
+var schemaV7 string
+
 const splitMarker = "-- +split"
 
 // migrations are applied in order; PRAGMA user_version records how many ran.
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6}
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7}
 
 // Store is the SQLite-backed store.
 type Store struct{ db *sql.DB }
@@ -775,4 +780,33 @@ func (s *Store) SetBgPreset(ctx context.Context, userID int64, preset string) er
 		return store.ErrNotFound
 	}
 	return err
+}
+
+// ---- uploaded service icons ----
+
+func (s *Store) SaveIcon(ctx context.Context, contentType string, data []byte, at time.Time) (int64, error) {
+	sum := sha256.Sum256(data)
+	hash := hex.EncodeToString(sum[:])
+	if _, err := s.db.ExecContext(ctx,
+		`INSERT OR IGNORE INTO icons(sha256, content_type, data, created_at) VALUES(?, ?, ?, ?)`,
+		hash, contentType, data, ts(at)); err != nil {
+		return 0, err
+	}
+	var id int64
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM icons WHERE sha256 = ?`, hash).Scan(&id)
+	return id, err
+}
+
+func (s *Store) GetIcon(ctx context.Context, id int64) (string, []byte, error) {
+	var ct string
+	var data []byte
+	err := s.db.QueryRowContext(ctx, `SELECT content_type, data FROM icons WHERE id = ?`, id).Scan(&ct, &data)
+	if isNoRows(err) {
+		return "", nil, store.ErrNotFound
+	}
+	return ct, data, err
+}
+
+func (s *Store) DeleteIcon(ctx context.Context, id int64) error {
+	return affected(s.db.ExecContext(ctx, `DELETE FROM icons WHERE id = ?`, id))
 }

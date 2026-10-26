@@ -22,6 +22,7 @@ func Run(t *testing.T, newStore func(t *testing.T) store.Store) {
 	t.Run("groups and services", func(t *testing.T) { testCatalog(t, newStore(t)) })
 	t.Run("discovery", func(t *testing.T) { testDiscovery(t, newStore(t)) })
 	t.Run("preferences", func(t *testing.T) { testPrefs(t, newStore(t)) })
+	t.Run("icons", func(t *testing.T) { testIcons(t, newStore(t)) })
 }
 
 var ctx = context.Background()
@@ -410,6 +411,41 @@ func testDiscovery(t *testing.T, s store.Store) {
 	isErr(t, err, store.ErrNotFound)
 	if ns, _ = s.ListNodes(ctx); len(ns) != 1 || ns[0].Name != "solo" {
 		t.Fatalf("nodes survived their connection: %+v", ns)
+	}
+}
+
+func testIcons(t *testing.T, s store.Store) {
+	at := time.Now()
+	png := []byte{0x89, 'P', 'N', 'G', 1, 2, 3}
+	a, err := s.SaveIcon(ctx, "image/png", png, at)
+	must(t, err)
+	b, err := s.SaveIcon(ctx, "image/png", append([]byte(nil), png...), at)
+	must(t, err)
+	if a == 0 || a != b {
+		t.Fatalf("identical images got ids %d and %d", a, b)
+	}
+	c, err := s.SaveIcon(ctx, "image/svg+xml", []byte("<svg/>"), at)
+	must(t, err)
+	if c == a {
+		t.Fatal("different images share an id")
+	}
+	ct, data, err := s.GetIcon(ctx, a)
+	must(t, err)
+	if ct != "image/png" || string(data) != string(png) {
+		t.Fatalf("icon = %q %v", ct, data)
+	}
+	_, _, err = s.GetIcon(ctx, 9999)
+	isErr(t, err, store.ErrNotFound)
+	must(t, s.DeleteIcon(ctx, a))
+	isErr(t, s.DeleteIcon(ctx, a), store.ErrNotFound)
+	if _, _, err := s.GetIcon(ctx, c); err != nil {
+		t.Fatal("deleting one icon removed another")
+	}
+	// A deleted image can be uploaded again and gets a fresh id.
+	d, err := s.SaveIcon(ctx, "image/png", png, at)
+	must(t, err)
+	if d == a {
+		t.Fatalf("id %d was reused", d)
 	}
 }
 

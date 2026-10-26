@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/mail"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/andregoncalvespires/homeview-dash/internal/auth"
@@ -197,14 +198,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 			Primary: l.Primary, Secondary: l.Secondary,
 			Status: guestStatus[sv.GuestID],
 		}
-		low := strings.ToLower(sv.Icon)
-		if app, ok := catalog.FromIcon(sv.Icon); ok {
-			view.IconURL = app.IconURL()
-		} else if strings.HasPrefix(low, "http://") || strings.HasPrefix(low, "https://") {
-			view.IconURL = sv.Icon
-		} else if !strings.HasPrefix(sv.Icon, catalog.IconPrefix) { // a dangling "app:" ref shows the default icon
-			view.IconText = sv.Icon
-		}
+		view.IconURL, view.IconText = resolveIcon(sv.Icon)
 		target := other
 		if g, ok := byGroup[sv.GroupID]; ok {
 			target = g
@@ -271,4 +265,27 @@ func (s *Server) revokeDevice(w http.ResponseWriter, r *http.Request, sess *sess
 		}
 	}
 	http.Redirect(w, r, "/devices?ok=msg.revoked", http.StatusSeeOther)
+}
+
+// resolveIcon turns a stored icon value into an image URL or a short text
+// (an emoji). Both are empty for a dangling reference, which shows the default.
+func resolveIcon(icon string) (url, text string) {
+	low := strings.ToLower(icon)
+	switch {
+	case icon == "":
+		return "", ""
+	case strings.HasPrefix(icon, catalog.IconPrefix):
+		if app, ok := catalog.FromIcon(icon); ok {
+			return app.IconURL(), ""
+		}
+		return "", ""
+	case strings.HasPrefix(icon, uploadIconPrefix):
+		if id, ok := uploadIconID(icon); ok {
+			return "/icons/" + strconv.FormatInt(id, 10), ""
+		}
+		return "", ""
+	case strings.HasPrefix(low, "http://") || strings.HasPrefix(low, "https://"):
+		return icon, ""
+	}
+	return "", icon
 }

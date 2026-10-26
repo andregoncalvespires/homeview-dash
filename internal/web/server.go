@@ -130,14 +130,15 @@ func (s *Server) Handler() http.Handler {
 
 	// Administrators.
 	mux.HandleFunc("GET /admin/services", s.require(true, s.getAdminServices))
-	mux.HandleFunc("POST /admin/services/save", s.require(true, s.saveService))
+	mux.HandleFunc("POST /admin/services/save", s.requireLimit(true, uploadIconBudget, s.saveService))
+	mux.HandleFunc("GET /icons/{id}", s.require(false, s.getIcon))
 	mux.HandleFunc("POST /admin/services/delete", s.require(true, s.deleteService))
 	mux.HandleFunc("GET /admin/groups", s.require(true, s.getAdminGroups))
 	mux.HandleFunc("POST /admin/groups/save", s.require(true, s.saveGroup))
 	mux.HandleFunc("POST /admin/groups/delete", s.require(true, s.deleteGroup))
 	mux.HandleFunc("GET /admin/discovery", s.require(true, s.getAdminDiscovery))
 	mux.HandleFunc("POST /admin/discovery/sync", s.require(true, s.syncDiscovery))
-	mux.HandleFunc("POST /admin/discovery/approve", s.require(true, s.approveGuest))
+	mux.HandleFunc("POST /admin/discovery/approve", s.requireLimit(true, uploadIconBudget, s.approveGuest))
 	mux.HandleFunc("POST /admin/discovery/ignore", s.require(true, s.setGuestState(store.GuestIgnored, "msg.guest_ignored")))
 	mux.HandleFunc("POST /admin/discovery/restore", s.require(true, s.setGuestState(store.GuestNew, "msg.guest_restored")))
 	mux.HandleFunc("POST /admin/discovery/forget", s.require(true, s.forgetGuest))

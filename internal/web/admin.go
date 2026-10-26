@@ -42,6 +42,7 @@ type adminServicesData struct {
 	Apps     []catalog.App // catalog entries for the "application" picker
 	NewGroup string        // text typed in "or create a new group", kept across a failed save
 	Origins  []originOpt   // machines and Proxmox hosts a service can run on
+	IconURL  string        // preview of the icon being edited, if it is an image
 }
 
 // originOpt is one entry of the "where does it run" picker.
@@ -67,6 +68,7 @@ func (s *Server) loadServicesPage(r *http.Request, edit store.Service) (adminSer
 		names[g.ID] = g.Name
 	}
 	data := adminServicesData{Edit: edit, Groups: groups, Apps: catalog.All()}
+	data.IconURL, _ = resolveIcon(edit.Icon)
 	if data.Origins, err = s.origins(r.Context(), edit.GuestID); err != nil {
 		return adminServicesData{}, err
 	}
@@ -135,8 +137,38 @@ func (s *Server) saveService(w http.ResponseWriter, r *http.Request, sess *sessi
 	}
 	v.GuestID = guestFromOrigin(r.PostFormValue("origin"))
 	newGroup, groupOK := store.CleanText(r.PostFormValue("new_group"), 80)
+
+	// An image sent from the computer replaces whatever the icon field says.
+	ctx := r.Context()
+	var oldIcon string
+	if v.ID > 0 {
+		if cur, err := s.st.GetService(ctx, v.ID); err == nil {
+			oldIcon = cur.Icon
+		}
+	}
+	uploaded, upKey, upErr := s.iconFromUpload(r)
+	if upErr != nil {
+		s.serverError(w, r, sess, upErr)
+		return
+	}
+	saved := false
+	defer func() {
+		if !saved && uploaded != "" {
+			s.pruneIcon(context.WithoutCancel(ctx), uploaded) // the form failed: do not keep the image
+		}
+	}()
+	if upKey != "" {
+		s.rerenderServiceForm(w, r, sess, v, newGroup, upKey)
+		return
+	}
+	if uploaded != "" {
+		v.Icon = uploaded
+	}
 	if key := validateService(&v); key != "" {
 		s.rerenderServiceForm(w, r, sess, v, newGroup, key)
+		return
+	} else if strings.HasPrefix(v.Icon, uploadIconPrefix) && !s.iconExists(ctx, v.Icon) {
+		s.rerenderServiceForm(w, r, sess, v, newGroup, "err.icon_gone")
 		return
 	} else if !groupOK {
 		s.rerenderServiceForm(w, r, sess, v, newGroup, "err.name")
@@ -157,6 +189,10 @@ func (s *Server) saveService(w http.ResponseWriter, r *http.Request, sess *sessi
 		}
 		s.serverError(w, r, sess, err)
 		return
+	}
+	saved = true
+	if oldIcon != "" && oldIcon != v.Icon {
+		s.pruneIcon(ctx, oldIcon)
 	}
 	http.Redirect(w, r, "/admin/services?ok=msg.saved", http.StatusSeeOther)
 }
@@ -179,10 +215,15 @@ func (s *Server) deleteService(w http.ResponseWriter, r *http.Request, sess *ses
 		s.renderError(w, r, sess, http.StatusBadRequest, "err.badrequest")
 		return
 	}
+	var icon string
+	if cur, err := s.st.GetService(r.Context(), id); err == nil {
+		icon = cur.Icon
+	}
 	if err := s.st.DeleteService(r.Context(), id); err != nil && !errors.Is(err, store.ErrNotFound) {
 		s.serverError(w, r, sess, err)
 		return
 	}
+	s.pruneIcon(r.Context(), icon)
 	http.Redirect(w, r, "/admin/services?ok=msg.deleted", http.StatusSeeOther)
 }
 

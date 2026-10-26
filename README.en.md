@@ -105,7 +105,8 @@ Under **Appearance**, each person chooses, for their own account and on any devi
 
 - **Theme**: automatic (follow the device), light or dark.
 - **Accent colour**: eight presets or any other colour (the text on top switches between white and dark to keep contrast).
-- **Rearranging (admin)**: on the dashboard, **Rearrange** lets you drag cards between groups and use the ⠿ handle to move groups; the keyboard works too (Alt + ↑/↓). The order is saved immediately. The dashboard uses two columns on wide screens and one on narrow ones.
+- **Custom icon**: under **Services** (and when approving a discovered machine) pick **Or upload an image from your computer** (PNG, JPEG, WebP, GIF or SVG, up to 512 KB). The image is stored in HomeView's database, identical images are stored once, and an image is removed when no service uses it any more.
+- **Rearranging (admin)**: on the dashboard, **Rearrange** lets you drag cards between groups and use the ⠿ handle to move groups; the keyboard works too (Alt + ↑/↓). The order is saved immediately. The dashboard uses two columns of groups on wide screens (one on narrow ones), and each group shows at most two columns of cards.
 - **Built-in backgrounds**: 11 original images (Starry sky is the default, together with the dark theme; "No background" is also an option). Regenerate with `python3 tools/backgrounds/gen.py <dir>` (needs Pillow and numpy).
 - **Your own background image**: PNG, JPEG or WebP up to 3 MB, with a fade control to keep text readable. The image lives in the database (the `/data` volume), is only served to its owner, and SVG is not accepted.
 

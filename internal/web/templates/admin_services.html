@@ -2,7 +2,7 @@
 <h1>{{t .Lang "admin.services.title"}}</h1>
 <section class="panel">
   <h2>{{if .Data.Edit.ID}}{{t .Lang "admin.services.edit"}}{{else}}{{t .Lang "admin.services.new"}}{{end}}</h2>
-  <form method="post" action="/admin/services/save" class="form grid2" data-appform>
+  <form method="post" action="/admin/services/save" class="form grid2" data-appform enctype="multipart/form-data">
     <input type="hidden" name="csrf" value="{{.CSRF}}">
     <input type="hidden" name="id" value="{{.Data.Edit.ID}}">
     <label>{{t .Lang "f.app"}}
@@ -31,6 +31,8 @@
     <label>{{t .Lang "f.external"}}<input name="external_url" value="{{.Data.Edit.ExternalURL}}" placeholder="https://ha.example.com" maxlength="2048"></label>
     <label>{{t .Lang "f.description"}}<input name="description" value="{{.Data.Edit.Description}}" maxlength="200"></label>
     <label>{{t .Lang "f.icon"}}<input name="icon" value="{{.Data.Edit.Icon}}" placeholder="🏠 / app:home-assistant / https://…/icon.png" maxlength="2048"><small class="muted">{{t .Lang "f.icon.help"}}</small></label>
+    <label>{{t .Lang "f.iconfile"}}<input type="file" name="icon_file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml">
+      <small class="muted">{{t .Lang "f.iconfile.help"}}</small>{{if .Data.IconURL}}<img class="iconprev" src="{{.Data.IconURL}}" alt="">{{end}}</label>
     <label>{{t .Lang "f.position"}}<input type="number" name="position" value="{{.Data.Edit.Position}}" min="-9999" max="9999"></label>
     <div class="actions">
       <button class="btn primary" type="submit">{{t .Lang "f.save"}}</button>

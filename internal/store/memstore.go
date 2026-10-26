@@ -24,6 +24,7 @@ type MemStore struct {
 	conns    map[int64]*Connection
 	guests   map[int64]*Guest
 	nodes    map[int64][]Node
+	icons    map[int64]*iconRow
 	prefs    map[int64]*prefsRow
 }
 
@@ -56,6 +57,7 @@ func NewMemStore() *MemStore {
 		conns:    map[int64]*Connection{},
 		guests:   map[int64]*Guest{},
 		nodes:    map[int64][]Node{},
+		icons:    map[int64]*iconRow{},
 		prefs:    map[int64]*prefsRow{},
 	}
 }
@@ -693,3 +695,41 @@ func (m *MemStore) SetBgPreset(_ context.Context, userID int64, preset string) e
 }
 
 var _ Store = (*MemStore)(nil)
+
+type iconRow struct {
+	ct   string
+	data []byte
+}
+
+func (m *MemStore) SaveIcon(_ context.Context, contentType string, data []byte, _ time.Time) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, r := range m.icons {
+		if r.ct == contentType && string(r.data) == string(data) {
+			return id, nil
+		}
+	}
+	id := m.id()
+	m.icons[id] = &iconRow{ct: contentType, data: append([]byte(nil), data...)}
+	return id, nil
+}
+
+func (m *MemStore) GetIcon(_ context.Context, id int64) (string, []byte, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.icons[id]
+	if !ok {
+		return "", nil, ErrNotFound
+	}
+	return r.ct, append([]byte(nil), r.data...), nil
+}
+
+func (m *MemStore) DeleteIcon(_ context.Context, id int64) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.icons[id]; !ok {
+		return ErrNotFound
+	}
+	delete(m.icons, id)
+	return nil
+}

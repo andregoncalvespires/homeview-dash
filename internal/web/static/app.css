@@ -80,7 +80,7 @@ body.reorder .card a { pointer-events: auto; cursor: grab; }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
 .toolbar #q { flex: 1 1 18rem; }
 .group h2 { text-transform: uppercase; letter-spacing: .06em; font-size: .78rem; color: var(--muted); }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .75rem; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; } /* a group never shows more than two columns of cards */
 .card {
   position: relative; display: flex; align-items: stretch; background: var(--panel);
   border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
@@ -184,6 +184,7 @@ label.sw input:focus-visible + .swatch { outline: 2px solid var(--accent); outli
 .wall:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .svclist { list-style: none; margin: .4rem 0 .6rem; padding: 0; display: flex; flex-wrap: wrap; gap: .4rem; }
 .svclist a { display: inline-block; padding: .15rem .6rem; border: 1px solid var(--line); border-radius: 999px; font-size: .85rem; text-decoration: none; color: var(--text); }
+.iconprev { display: block; width: 40px; height: 40px; object-fit: contain; margin-top: .4rem; }
 .bgprev { display: block; max-width: 100%; max-height: 180px; border-radius: 10px; border: 1px solid var(--line); margin: 0 0 1rem; object-fit: cover; }
 
 @media (max-width: 900px) {
