@@ -33,7 +33,7 @@ const (
 // pageFiles are the templates rendered inside the shared layout.
 var pageFiles = []string{
 	"login", "verify", "dashboard", "devices", "settings",
-	"admin_services", "admin_groups", "admin_users", "admin_connections", "admin_discovery", "error",
+	"admin_services", "admin_groups", "admin_yaml", "admin_users", "admin_connections", "admin_discovery", "error",
 }
 
 // Server wires everything together.
@@ -136,6 +136,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /admin/groups", s.require(true, s.getAdminGroups))
 	mux.HandleFunc("POST /admin/groups/save", s.require(true, s.saveGroup))
 	mux.HandleFunc("POST /admin/groups/delete", s.require(true, s.deleteGroup))
+	mux.HandleFunc("GET /admin/yaml", s.require(true, s.getAdminYAML))
+	mux.HandleFunc("GET /admin/yaml/export", s.require(true, s.exportYAMLFile))
+	mux.HandleFunc("POST /admin/yaml", s.requireLimit(true, maxYAMLBytes+64<<10, s.postAdminYAML))
 	mux.HandleFunc("GET /admin/discovery", s.require(true, s.getAdminDiscovery))
 	mux.HandleFunc("POST /admin/discovery/sync", s.require(true, s.syncDiscovery))
 	mux.HandleFunc("POST /admin/discovery/approve", s.requireLimit(true, uploadIconBudget, s.approveGuest))

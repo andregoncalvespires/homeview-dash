@@ -30,7 +30,7 @@ HomeView is a simple alternative to dashboards such as Heimdall and Homarr, buil
 | Version | Delivery |
 |---|---|
 | v0.4 | Several services per VM/LXC and the Proxmox host IP (no Docker agent: you pick the application) |
-| v0.5 | YAML import/export, views by hierarchy/type, group permissions |
+| v0.5 | Views by hierarchy/type, group permissions |
 
 ## Install (3 steps)
 
@@ -107,7 +107,8 @@ Under **Appearance**, each person chooses, for their own account and on any devi
 - **Accent colour**: eight presets or any other colour (the text on top switches between white and dark to keep contrast).
 - **Gear menu**: Services, Groups, Discovery, Users, Appearance, My devices and Sign out live in a drop-down under the ⚙ icon in the header (closes with Esc or a click elsewhere).
 - **Custom icon**: under **Services** (and when approving a discovered machine) pick **Or upload an image from your computer** (PNG, JPEG, WebP, GIF or SVG, up to 512 KB). The image is stored in HomeView's database, identical images are stored once, and an image is removed when no service uses it any more.
-- **Rearranging (admin)**: on the dashboard, **Rearrange** lets you drag cards between groups and use the ⠿ handle to move groups; the keyboard works too (Alt + ↑/↓). The order is saved immediately. The dashboard uses two columns of groups on wide screens (one on narrow ones), and each group shows at most two columns of cards.
+- **Rearranging (admin)**: on the dashboard, **Rearrange** (in the ⚙ menu) lets you drag cards between groups and use the ⠿ handle to move groups; the keyboard works too (Alt + ↑/↓). The order is saved immediately. The dashboard uses two columns of groups on wide screens (one on narrow ones), and each group shows at most two columns of cards.
+- **YAML editor (admin)**: ⚙ menu → **Edit YAML**. Groups and services show up as text; **Check** previews the changes and **Apply** saves them (anything missing from the file is removed). You can download `homeview.yml`. Proxmox connections, users and discovery are not included. Configuration lives in the SQLite file `homeview.db`, in the Docker volume `homeview-data` (`/data`).
 - **Built-in backgrounds**: 11 original images (Starry sky is the default, together with the dark theme; "No background" is also an option). Regenerate with `python3 tools/backgrounds/gen.py <dir>` (needs Pillow and numpy).
 - **Your own background image**: PNG, JPEG or WebP up to 3 MB, with a fade control to keep text readable. The image lives in the database (the `/data` volume), is only served to its owner, and SVG is not accepted.
 

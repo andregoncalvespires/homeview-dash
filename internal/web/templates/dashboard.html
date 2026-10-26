@@ -2,7 +2,7 @@
 {{if .Data.HasServices}}
 <div class="toolbar">
   <input id="q" type="search" placeholder="{{t .Lang "dash.search"}}" aria-label="{{t .Lang "dash.search"}}" autocomplete="off">
-  {{if .User.IsAdmin}}<button id="reorder" class="btn" type="button" aria-pressed="false" data-save="/admin/layout" data-csrf="{{.CSRF}}"
+  {{if .User.IsAdmin}}<button id="reorder" class="btn" type="button" hidden aria-pressed="false" data-save="/admin/layout" data-csrf="{{.CSRF}}"
     data-label-done="{{t .Lang "dash.reorder.done"}}" data-label-start="{{t .Lang "dash.reorder"}}" data-saved="{{t .Lang "dash.reorder.saved"}}" data-failed="{{t .Lang "dash.reorder.failed"}}">{{t .Lang "dash.reorder"}}</button>
   <span id="reorder-status" class="muted" role="status" aria-live="polite"></span>{{end}}
 </div>

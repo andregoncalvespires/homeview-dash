@@ -1,0 +1,15 @@
+{{define "content"}}
+<h1>{{t .Lang "admin.yaml.title"}}</h1>
+<p class="muted">{{t .Lang "admin.yaml.intro"}}</p>
+{{if .Data.Notice}}<p class="flash{{if .Data.Bad}} err{{end}}" role="{{if .Data.Bad}}alert{{else}}status{{end}}">{{.Data.Notice}}</p>{{end}}
+<form method="post" action="/admin/yaml" class="form">
+  <input type="hidden" name="csrf" value="{{.CSRF}}">
+  <textarea name="yaml" class="yaml" rows="28" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off" aria-label="{{t .Lang "admin.yaml.title"}}">{{.Data.Text}}</textarea>
+  <div class="row">
+    <button class="btn" type="submit" name="action" value="check">{{t .Lang "yaml.check"}}</button>
+    <button class="btn primary" type="submit" name="action" value="apply" data-confirm-submit="{{t .Lang "yaml.confirm"}}">{{t .Lang "yaml.apply"}}</button>
+    <a class="btn" href="/admin/yaml">{{t .Lang "yaml.reset"}}</a>
+    <a class="btn" href="/admin/yaml/export">{{t .Lang "yaml.download"}}</a>
+  </div>
+</form>
+{{end}}

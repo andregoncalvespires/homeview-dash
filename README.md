@@ -30,7 +30,7 @@ O HomeView é uma alternativa simples a painéis como Heimdall e Homarr, pensada
 | Versão | Entrega |
 |---|---|
 | v0.4 | Vários serviços por VM/LXC e IP do host Proxmox (sem agente Docker: você escolhe a aplicação) |
-| v0.5 | Importar/exportar YAML, visões por hierarquia/tipo, permissões por grupo |
+| v0.5 | Visões por hierarquia/tipo, permissões por grupo |
 
 ## Instalação (3 passos)
 
@@ -107,7 +107,8 @@ No menu **Aparência**, cada pessoa escolhe, só para a sua conta e valendo em q
 - **Cor de destaque**: oito cores prontas ou qualquer outra (o texto sobre ela ajusta para branco ou escuro, mantendo o contraste).
 - **Menu em engrenagem**: Serviços, Grupos, Descobertas, Usuários, Aparência, Meus dispositivos e Sair ficam num menu suspenso no ícone ⚙ do cabeçalho (fecha com Esc ou clicando fora).
 - **Ícone próprio**: em **Serviços** (e ao aprovar uma descoberta) escolha **Ou envie uma imagem do computador** (PNG, JPEG, WebP, GIF ou SVG, até 512 KB). A imagem fica guardada no banco do HomeView, imagens iguais são guardadas uma vez e a imagem é apagada quando nenhum serviço a usa mais.
-- **Reorganizar (admin)**: no painel, **Reorganizar** deixa arrastar os cards entre grupos e o ícone ⠿ para mover grupos; também funciona pelo teclado (Alt + ↑/↓). A ordem é salva na hora. O painel usa duas colunas de grupos em telas largas (e uma em telas estreitas), e cada grupo mostra no máximo duas colunas de cards.
+- **Reorganizar (admin)**: no painel, **Reorganizar** (no menu ⚙) deixa arrastar os cards entre grupos e o ícone ⠿ para mover grupos; também funciona pelo teclado (Alt + ↑/↓). A ordem é salva na hora. O painel usa duas colunas de grupos em telas largas (e uma em telas estreitas), e cada grupo mostra no máximo duas colunas de cards.
+- **Editor YAML (admin)**: no menu ⚙ → **Editar YAML**. Grupos e serviços aparecem como texto; **Validar** mostra o que muda e **Aplicar** grava (o que não estiver no arquivo é removido). Dá para baixar `homeview.yml`. Conexões Proxmox, usuários e a descoberta não entram. A configuração fica no SQLite `homeview.db`, no volume Docker `homeview-data` (`/data`).
 - **Fundos prontos**: 11 imagens originais (Céu estrelado é o padrão, junto com o tema escuro; há também a opção "Sem fundo"). Gerar de novo: `python3 tools/backgrounds/gen.py <pasta>` (precisa de Pillow e numpy).
 - **Imagem de fundo própria**: PNG, JPEG ou WebP de até 3 MB, com controle de esmaecimento para manter o texto legível. A imagem fica no banco (volume `/data`), só é entregue ao dono e SVG não é aceito.
 

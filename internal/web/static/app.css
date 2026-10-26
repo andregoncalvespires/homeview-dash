@@ -38,6 +38,7 @@ h2 { font-size: 1.05rem; margin: 0 0 .75rem; }
 .top {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
   padding: .75rem 1.25rem; background: var(--panel); border-bottom: 1px solid var(--line);
+  position: relative; z-index: 30;
 }
 .brand { display: inline-flex; align-items: center; gap: .5rem; font-weight: 700; color: var(--text); }
 .brand svg { color: var(--accent); }
@@ -205,3 +206,6 @@ label.sw input:focus-visible + .swatch { outline: 2px solid var(--accent); outli
   main { padding: .9rem; }
   .grid { grid-template-columns: 1fr; }
 }
+
+textarea.yaml { width: 100%; box-sizing: border-box; font: .88rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; tab-size: 2; white-space: pre; overflow: auto; resize: vertical; min-height: 18rem;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: .75rem; }

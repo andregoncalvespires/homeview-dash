@@ -22,8 +22,10 @@
       {{if .User.IsAdmin}}
       <a href="/admin/services"{{if eq .Path "/admin/services"}} aria-current="page"{{end}}>{{t .Lang "nav.services"}}</a>
       <a href="/admin/groups"{{if eq .Path "/admin/groups"}} aria-current="page"{{end}}>{{t .Lang "nav.groups"}}</a>
+      <a href="/admin/yaml"{{if eq .Path "/admin/yaml"}} aria-current="page"{{end}}>{{t .Lang "nav.yaml"}}</a>
       <a href="/admin/discovery"{{if eq .Path "/admin/discovery"}} aria-current="page"{{end}}>{{t .Lang "nav.discovery"}}</a>
       <a href="/admin/users"{{if eq .Path "/admin/users"}} aria-current="page"{{end}}>{{t .Lang "nav.users"}}</a>
+      <button class="linkbtn" id="reorder-menu" type="button" hidden>{{t .Lang "dash.reorder"}}</button>
       <hr>
       {{end}}
       <a href="/settings"{{if eq .Path "/settings"}} aria-current="page"{{end}}>{{t .Lang "nav.settings"}}</a>

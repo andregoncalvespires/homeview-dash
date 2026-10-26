@@ -118,7 +118,9 @@
       on = v;
       document.body.classList.toggle('reorder', v);
       reorder.setAttribute('aria-pressed', v ? 'true' : 'false');
-      reorder.textContent = reorder.getAttribute(v ? 'data-label-done' : 'data-label-start');
+      reorder.textContent = reorder.getAttribute('data-label-done');
+      reorder.hidden = !v;
+      if (v) { var m = document.getElementById('menu'); if (m) m.removeAttribute('open'); reorder.focus(); }
       helpEl.hidden = !v;
       statusEl.textContent = '';
       all('.card').forEach(function (c) {
@@ -127,7 +129,9 @@
       });
       if (v) last = snapshot();
     };
-    reorder.addEventListener('click', function () { setMode(!on); });
+    reorder.addEventListener('click', function () { setMode(false); });
+    var menuItem = document.getElementById('reorder-menu');
+    if (menuItem) { menuItem.hidden = false; menuItem.addEventListener('click', function () { setMode(true); }); }
     cols.addEventListener('click', function (e) { // no navigation while arranging
       if (on && e.target.closest && e.target.closest('.card a')) e.preventDefault();
     });
@@ -224,6 +228,7 @@
   // Confirmation before destructive actions (CSP forbids inline handlers).
   document.addEventListener('submit', function (e) {
     var msg = e.target && e.target.getAttribute && e.target.getAttribute('data-confirm');
+    if (!msg && e.submitter && e.submitter.getAttribute) msg = e.submitter.getAttribute('data-confirm-submit');
     if (msg && !window.confirm(msg)) e.preventDefault();
   });
 })();
