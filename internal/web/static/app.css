@@ -232,3 +232,6 @@ details.access summary { cursor: pointer; font-weight: 600; }
 details.access label.check { justify-content: flex-start; display: flex; align-items: center; padding: .15rem 0; }
 .groupcard label.check, details.access label.check { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: nowrap; gap: .5rem; font-weight: 400; text-align: left; }
 .groupcard label.check input, details.access label.check input { margin: 0; flex: none; }
+
+.pagehead { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.pagehead h1 { margin: 0; }

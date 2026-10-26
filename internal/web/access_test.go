@@ -136,14 +136,58 @@ func TestGroupAdminForm(t *testing.T) {
 		t.Errorf("kitchen after unrestrict = %+v", got)
 	}
 	_, page := e.get(admin, "/admin/groups")
-	for _, want := range []string{"Casa", "Cozinha", "Quem vê", `name="restricted"`, "bob@example.com"} {
+	for _, want := range []string{"Casa", "Cozinha", "↳", "Restrito (1)", "Todos", `href="/admin/groups?edit=`, `href="/admin/groups?new=1"`} {
 		if !strings.Contains(page, want) {
-			t.Errorf("groups page lacks %q", want)
+			t.Errorf("groups list lacks %q", want)
 		}
 	}
-	if strings.Contains(page, "admin@example.com</span>") {
+	if strings.Contains(page, `name="restricted"`) || strings.Contains(page, "Quem vê") {
+		t.Error("the form must stay closed until a button is clicked")
+	}
+	if i, j, k := strings.Index(page, ">Casa<"), strings.Index(page, "Cozinha"), strings.Index(page, ">Publico<"); !(i < j && j < k) {
+		t.Errorf("order: parent, its sub-group, then the next group (%d %d %d)", i, j, k)
+	}
+	_, form := e.get(admin, "/admin/groups?edit="+itoa(casa.ID))
+	for _, want := range []string{`name="restricted"`, "Quem vê", "bob@example.com", `name="id" value="` + itoa(casa.ID) + `"`} {
+		if !strings.Contains(form, want) {
+			t.Errorf("edit form lacks %q", want)
+		}
+	}
+	if strings.Contains(form, "admin@example.com</span>") {
 		t.Error("administrators should not be offered in the access list")
 	}
+	_, form = e.get(admin, "/admin/groups?new=1")
+	if !strings.Contains(form, `name="restricted"`) || strings.Contains(form, `type="hidden" name="id" value="`+itoa(casa.ID)+`"><input name="name"`) {
+		t.Error("new-group form")
+	}
+}
+
+func TestAdminListsAreAlphabetical(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	for i, n := range []string{"Zeta", "água", "Beta", "Alfa"} {
+		g := store.Group{Name: n, Position: 10 - i}
+		_ = e.st.SaveGroup(ctx, &g)
+		sv := store.Service{Name: n + " svc", InternalURL: "http://10.0.0.1", Position: 10 - i}
+		_ = e.st.SaveService(ctx, &sv)
+	}
+	admin := e.login("admin@example.com")
+	order := func(page string, names ...string) {
+		t.Helper()
+		last := -1
+		for _, n := range names {
+			i := strings.Index(page, n)
+			if i < 0 || i < last {
+				t.Fatalf("%q out of order or missing in %d", n, i)
+			}
+			last = i
+		}
+	}
+	_, p := e.get(admin, "/admin/groups")
+	order(p, ">água<", ">Alfa<", ">Beta<", ">Zeta<")
+	_, p = e.get(admin, "/admin/services")
+	i := strings.Index(p, "<tbody>")
+	order(p[i:], "água svc", "Alfa svc", "Beta svc", "Zeta svc")
 }
 
 func TestYAMLSubgroupsAndAccess(t *testing.T) {

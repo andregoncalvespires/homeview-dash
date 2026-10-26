@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/mail"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -77,6 +78,8 @@ func (s *Server) loadServicesPage(r *http.Request, edit store.Service) (adminSer
 	for _, sv := range services {
 		data.Rows = append(data.Rows, serviceRow{Service: sv, GroupName: names[sv.GroupID]})
 	}
+	sort.SliceStable(data.Rows, func(i, j int) bool { return sortKey(data.Rows[i].Name) < sortKey(data.Rows[j].Name) })
+	sort.SliceStable(data.Groups, func(i, j int) bool { return sortKey(data.Groups[i].Name) < sortKey(data.Groups[j].Name) })
 	return data, nil
 }
 
@@ -240,8 +243,10 @@ func (s *Server) deleteService(w http.ResponseWriter, r *http.Request, sess *ses
 
 type groupRow struct {
 	store.Group
-	Parents []parentOpt // possible parents (top-level groups other than itself), when it may have one
-	Users   []userOpt
+	ParentName string
+	Services   int         // how many services are in it
+	Parents    []parentOpt // possible parents (top-level groups other than itself), when it may have one
+	Users      []userOpt
 }
 
 type parentOpt struct {
@@ -258,12 +263,35 @@ type userOpt struct {
 }
 
 type adminGroupsData struct {
-	Rows    []groupRow
-	Parents []parentOpt // for the "new group" form
-	Users   []userOpt
+	Rows []groupRow // the list, parents followed by their sub-groups, alphabetical
+	Form *groupRow  // the group being edited or created; nil keeps the form closed
+	New  bool
 }
 
-func (s *Server) loadGroupsPage(ctx context.Context) (adminGroupsData, error) {
+// sortKey orders names alphabetically ignoring case and Portuguese accents.
+func sortKey(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		switch r {
+		case 'á', 'à', 'â', 'ã', 'ä':
+			r = 'a'
+		case 'é', 'è', 'ê', 'ë':
+			r = 'e'
+		case 'í', 'ì', 'î', 'ï':
+			r = 'i'
+		case 'ó', 'ò', 'ô', 'õ', 'ö':
+			r = 'o'
+		case 'ú', 'ù', 'û', 'ü':
+			r = 'u'
+		case 'ç':
+			r = 'c'
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+func (s *Server) loadGroupsPage(ctx context.Context, editID int64, isNew bool) (adminGroupsData, error) {
 	groups, err := s.st.ListGroups(ctx)
 	if err != nil {
 		return adminGroupsData{}, err
@@ -272,16 +300,27 @@ func (s *Server) loadGroupsPage(ctx context.Context) (adminGroupsData, error) {
 	if err != nil {
 		return adminGroupsData{}, err
 	}
+	services, err := s.st.ListServices(ctx)
+	if err != nil {
+		return adminGroupsData{}, err
+	}
+	count := map[int64]int{}
+	for _, sv := range services {
+		count[sv.GroupID]++
+	}
+	name := map[int64]string{}
 	hasChild := map[int64]bool{}
 	for _, g := range groups {
+		name[g.ID] = g.Name
 		if g.ParentID != 0 {
 			hasChild[g.ParentID] = true
 		}
 	}
-	data := adminGroupsData{}
+	sort.SliceStable(groups, func(i, j int) bool { return sortKey(groups[i].Name) < sortKey(groups[j].Name) })
+	var parents []parentOpt
 	for _, g := range groups {
 		if g.ParentID == 0 {
-			data.Parents = append(data.Parents, parentOpt{ID: g.ID, Name: g.Name})
+			parents = append(parents, parentOpt{ID: g.ID, Name: g.Name})
 		}
 	}
 	userOpts := func(g *store.Group) []userOpt {
@@ -302,25 +341,48 @@ func (s *Server) loadGroupsPage(ctx context.Context) (adminGroupsData, error) {
 		}
 		return out
 	}
-	data.Users = userOpts(nil)
-	for i := range groups {
-		g := groups[i]
-		row := groupRow{Group: g, Users: userOpts(&g)}
+	build := func(g store.Group) groupRow {
+		row := groupRow{Group: g, ParentName: name[g.ParentID], Services: count[g.ID], Users: userOpts(&g)}
 		if !hasChild[g.ID] { // a group with sub-groups stays at the top
-			for _, p := range data.Parents {
+			for _, p := range parents {
 				if p.ID != g.ID {
 					p.Selected = p.ID == g.ParentID
 					row.Parents = append(row.Parents, p)
 				}
 			}
 		}
-		data.Rows = append(data.Rows, row)
+		return row
+	}
+	data := adminGroupsData{}
+	for _, g := range groups { // parents first, each followed by its sub-groups
+		if g.ParentID != 0 && name[g.ParentID] != "" {
+			continue
+		}
+		data.Rows = append(data.Rows, build(g))
+		for _, ch := range groups {
+			if ch.ParentID == g.ID {
+				data.Rows = append(data.Rows, build(ch))
+			}
+		}
+	}
+	switch {
+	case isNew:
+		f := build(store.Group{})
+		f.Parents = append([]parentOpt(nil), parents...)
+		data.Form, data.New = &f, true
+	case editID != 0:
+		for i := range data.Rows {
+			if data.Rows[i].ID == editID {
+				data.Form = &data.Rows[i]
+			}
+		}
 	}
 	return data, nil
 }
 
 func (s *Server) getAdminGroups(w http.ResponseWriter, r *http.Request, sess *session) {
-	data, err := s.loadGroupsPage(r.Context())
+	editID, _ := strconv.ParseInt(r.URL.Query().Get("edit"), 10, 64)
+	data, err := s.loadGroupsPage(r.Context(), editID, r.URL.Query().Get("new") != "")
 	if err != nil {
 		s.serverError(w, r, sess, err)
 		return

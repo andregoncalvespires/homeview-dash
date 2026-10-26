@@ -1,26 +1,16 @@
 {{define "content"}}
-<h1>{{t .Lang "admin.groups.title"}}</h1>
+<div class="pagehead">
+  <h1>{{t .Lang "admin.groups.title"}}</h1>
+  {{if not .Data.Form}}<a class="btn primary" href="/admin/groups?new=1">{{t .Lang "admin.groups.new"}}</a>{{end}}
+</div>
 <p class="muted">{{t .Lang "admin.groups.intro"}}</p>
+{{with .Data.Form}}
 <section class="panel">
-  <h2>{{t .Lang "admin.groups.new"}}</h2>
-  <form method="post" action="/admin/groups/save" class="form row">
-    <input type="hidden" name="csrf" value="{{.CSRF}}">
-    <label>{{t .Lang "f.name"}}<input name="name" required maxlength="80"></label>
-    <label>{{t .Lang "f.position"}}<input type="number" name="position" value="0" min="-9999" max="9999"></label>
-    {{if .Data.Parents}}<label>{{t .Lang "f.parent"}}
-      <select name="parent_id"><option value="0">{{t .Lang "f.parent_none"}}</option>
-        {{range .Data.Parents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
-      </select></label>{{end}}
-    <button class="btn primary" type="submit">{{t .Lang "f.add"}}</button>
-  </form>
-</section>
-<div class="groupcards">
-{{range .Data.Rows}}
-<section class="panel groupcard">
+  <h2>{{if $.Data.New}}{{t $.Lang "admin.groups.new"}}{{else}}{{t $.Lang "f.edit"}}: {{.Name}}{{end}}</h2>
   <form method="post" action="/admin/groups/save" class="form">
-    <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+    <input type="hidden" name="csrf" value="{{$.CSRF}}">{{if .ID}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
     <div class="row">
-      <label>{{t $.Lang "f.name"}}<input name="name" value="{{.Name}}" required maxlength="80"></label>
+      <label>{{t $.Lang "f.name"}}<input name="name" value="{{.Name}}" required maxlength="80" autofocus></label>
       <label>{{t $.Lang "f.position"}}<input type="number" name="position" value="{{.Position}}" min="-9999" max="9999"></label>
       {{if .Parents}}<label>{{t $.Lang "f.parent"}}
         <select name="parent_id"><option value="0">{{t $.Lang "f.parent_none"}}</option>
@@ -34,17 +24,35 @@
       {{range .Users}}<label class="check"><input type="checkbox" name="users" value="{{.ID}}"{{if .Checked}} checked{{end}}> {{.Name}} <span class="muted">{{.Email}}</span></label>
       {{else}}<p class="muted">{{t $.Lang "f.no_other_users"}}</p>{{end}}
     </details>
-    <div class="row">
-      <button class="btn small" type="submit">{{t $.Lang "f.save"}}</button>
+    <div class="actions">
+      <button class="btn primary" type="submit">{{t $.Lang "f.save"}}</button>
+      <a class="btn" href="/admin/groups">{{t $.Lang "f.cancel"}}</a>
     </div>
   </form>
-  <form method="post" action="/admin/groups/delete" class="inline" data-confirm="{{t $.Lang "f.confirm"}}">
-    <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
-    <button class="btn small danger" type="submit">{{t $.Lang "f.delete"}}</button>
-  </form>
 </section>
-{{else}}
-<p class="muted">{{t $.Lang "admin.groups.none"}}</p>
 {{end}}
+<div class="tablewrap">
+<table>
+  <thead><tr><th>{{t .Lang "f.name"}}</th><th>{{t .Lang "f.parent"}}</th><th>{{t .Lang "f.access"}}</th><th>{{t .Lang "f.services"}}</th><th></th></tr></thead>
+  <tbody>
+  {{range .Data.Rows}}
+  <tr>
+    <td>{{if .ParentID}}<span class="muted">↳</span> {{end}}{{.Name}}</td>
+    <td>{{.ParentName}}</td>
+    <td>{{if .Restricted}}{{t $.Lang "f.access.restricted"}} ({{len .UserIDs}}){{else}}<span class="muted">{{t $.Lang "f.access.all"}}</span>{{end}}</td>
+    <td>{{.Services}}</td>
+    <td class="right nowrap">
+      <a class="btn small" href="/admin/groups?edit={{.ID}}">{{t $.Lang "f.edit"}}</a>
+      <form method="post" action="/admin/groups/delete" class="inline" data-confirm="{{t $.Lang "f.confirm"}}">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+        <button class="btn small danger" type="submit">{{t $.Lang "f.delete"}}</button>
+      </form>
+    </td>
+  </tr>
+  {{else}}
+  <tr><td colspan="5" class="muted">{{t $.Lang "admin.groups.none"}}</td></tr>
+  {{end}}
+  </tbody>
+</table>
 </div>
 {{end}}
