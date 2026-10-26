@@ -88,7 +88,7 @@
   (function () {
     var secs = Array.prototype.slice.call(document.querySelectorAll('.group[data-gid]'));
     if (!secs.length) return;
-    var KEY = 'hv_collapsed', all = document.getElementById('toggle-all');
+    var KEY = 'hv_collapsed';
     var store = {
       get: function () { try { var v = JSON.parse(localStorage.getItem(KEY) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } },
       set: function (v) { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* private mode: not remembered */ } }
@@ -104,25 +104,14 @@
     var save = function () {
       store.set(secs.filter(function (s) { return s.classList.contains('collapsed'); }).map(function (s) { return s.getAttribute('data-gid'); }));
     };
-    var label = function () {
-      if (!all) return;
-      var every = secs.every(function (s) { return s.classList.contains('collapsed'); });
-      all.textContent = all.getAttribute(every ? 'data-expand' : 'data-collapse');
-    };
     var saved = store.get();
     secs.forEach(function (s) { paint(s, saved.indexOf(s.getAttribute('data-gid')) !== -1); });
-    label();
     document.addEventListener('click', function (e) {
       var b = e.target.closest && e.target.closest('.gtoggle');
       if (!b) return;
       var sec = b.closest('.group');
       paint(sec, !sec.classList.contains('collapsed'));
-      save(); label();
-    });
-    if (all) all.addEventListener('click', function () {
-      var every = secs.every(function (s) { return s.classList.contains('collapsed'); });
-      secs.forEach(function (s) { paint(s, !every); });
-      save(); label();
+      save();
     });
   })();
   // Admin: rearrange groups and cards by dragging (or Alt + Up/Down). The order is
