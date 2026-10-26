@@ -4,7 +4,7 @@
 
 **English** · [Português (Brasil)](README.md)
 
-![MIT license](https://img.shields.io/badge/license-MIT-blue) ![status](https://img.shields.io/badge/status-v0.1%20in%20development-orange)
+![MIT license](https://img.shields.io/badge/license-MIT-blue) ![status](https://img.shields.io/badge/status-v0.5%20in%20development-orange)
 
 ## What it is
 
@@ -16,21 +16,22 @@ HomeView is a simple alternative to dashboards such as Heimdall and Homarr, buil
 - **Two addresses per service** (internal and external). The dashboard highlights the right one depending on whether you are at home or away, and shows the other as a shortcut.
 - **Portuguese and English UI**, light and dark themes, instant search (press `/`).
 
-### What works today (v0.3)
+### What works today (v0.5)
 
-- E-mail code sign-in + per-device cookie, with a "My devices" page to revoke access.
-- Administrator created from the console, **nothing written to `docker-compose.yml`**.
-- Users, groups and services (name, description, icon, internal URL, external URL, position).
-- One-time sign-in link from the console, as a recovery path if e-mail is down.
-- **35-application catalog** with icon and suggested port, **open in a new tab**, and **light/dark theme, accent colour and background image per user** (v0.3).
-- **Proxmox discovery** (v0.2): reads the VMs and LXCs of your server or cluster, you approve what goes on the dashboard, and a green/grey dot shows whether they are running.
+- **Passwordless sign-in**: e-mail code + per-device cookie, with a "My devices" page to revoke access. A one-time sign-in link from the console is the recovery path if e-mail is down.
+- **Administrator created from the console**, nothing written to `docker-compose.yml`.
+- **Users, groups and services** (name, description, icon, internal URL, external URL), with a **35-application catalog** (icon and suggested port) or a **custom icon** uploaded from your computer.
+- **Proxmox discovery**: reads the VMs and LXCs of your server or cluster; you approve what goes on the dashboard, with **several services per VM/LXC** and the option to point at the **Proxmox host's own IP**. A green/grey dot shows whether they are running.
+- **Organisable dashboard**: rearrange cards and groups by dragging (two columns of groups), **collapse/expand groups** (remembered in the browser) and instant search.
+- **YAML editor** for groups and services, with validation before applying and file download.
+- **Per-user appearance**: light/dark theme, accent colour and 11 built-in backgrounds (starry sky and dark theme are the default) or your own image.
+- **Gear menu** (⚙) in the header with every screen.
 
 ### What comes next
 
 | Version | Delivery |
 |---|---|
-| v0.4 | Several services per VM/LXC and the Proxmox host IP (no Docker agent: you pick the application) |
-| v0.5 | Views by hierarchy/type, group permissions |
+| v0.6 | Views by hierarchy/type and group permissions |
 
 ## Install (3 steps)
 
@@ -63,7 +64,7 @@ Open the configured address, enter the administrator's e-mail and type the code 
 
 ## Configuration
 
-Everything is set through environment variables, usually in the `.env` file.
+Runtime settings (address, SMTP, language…) are environment variables, usually in the `.env` file. Users, groups, services and connections live in the SQLite database `homeview.db`, inside the Docker volume `homeview-data` (`/data`): there is no configuration file next to the compose file.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -80,6 +81,22 @@ Everything is set through environment variables, usually in the `.env` file.
 | `HOMEVIEW_ADDR` / `HOMEVIEW_DATA` | `:8080` / `/data` | Listen address and data folder (already set in the image). |
 | `TZ` | `UTC` | Time zone used in the pages, e.g. `America/Sao_Paulo`. |
 
+### Setting up e-mail
+
+The sign-in code is sent over SMTP, so a dedicated account is a good idea.
+
+- **Gmail**: enable 2-step verification and create an *app password*. Use `smtp.gmail.com`, port `587`, `starttls`, user = your address, password = the app password.
+- **Other providers** (Brevo, Mailgun, Office 365, your own server): use the SMTP details they give you. For port 465 set `HOMEVIEW_SMTP_SECURITY=tls`.
+- **Unencrypted local relay** (e.g. Postfix on your LAN): `HOMEVIEW_SMTP_SECURITY=none`. Do not use this on networks you do not control.
+
+HomeView **refuses** to send credentials over an unencrypted connection.
+
+### Behind a reverse proxy or Cloudflare Tunnel
+
+1. Publish the container (port 8080) through the proxy/tunnel and set `HOMEVIEW_BASE_URL=https://dash.example.com`.
+2. The proxy must **preserve the `Host` header** (Nginx: `proxy_set_header Host $host;`). Cloudflare Tunnel already does. The `Host` decides between internal and external links.
+3. Always use HTTPS away from home.
+
 ### Internal vs external links
 
 Each service can have an **internal URL** (e.g. `http://192.168.1.10:8123`) and an **external URL** (e.g. `https://ha.example.com`).
@@ -92,26 +109,12 @@ Each service can have an **internal URL** (e.g. `http://192.168.1.10:8123`) and 
 
 ### Application catalog
 
-HomeView knows **Home Assistant, Zigbee2MQTT, ESPHome, EMQX, MQTT, MQTT Explorer, Proxmox, Portainer, Omada Controller, Code Server, Node-RED, Grafana, OpenMediaVault, Frigate, Matter, Immich, Jellyfin, Music Assistant, qBittorrent, OpenSpeedTest, FileBrowser, OpenWrt, Debian, Ubuntu, Docker, Podman, Cloudflare DDNS, Cloudflared, UniFi OS, WireGuard, Tailscale, AdGuard Home, Pi-hole and go2rtc**: an icon bundled in the image (no CDN, works offline) and the usual access port.
+HomeView knows **AdGuard Home, Cloudflare DDNS, Cloudflared, Code Server, Debian, Docker, EMQX, ESPHome, FileBrowser, Frigate, go2rtc, Grafana, Home Assistant, Immich, InfluxDB, Jellyfin, Matter Server, MQTT (broker), MQTT Explorer, Music Assistant, Node-RED, Omada Controller, OpenMediaVault, OpenSpeedTest, OpenWrt, Pi-hole, Podman, Portainer, Proxmox, qBittorrent, Tailscale, Ubuntu, UniFi OS, WireGuard (wg-easy) and Zigbee2MQTT**: an icon bundled in the image (no CDN, works offline) and the usual access port.
 
 - In the **Services** form, **Known application** fills in the icon (`app:home-assistant`) and, if you already typed only the IP in the internal URL (e.g. `http://192.168.1.10`), completes it with the default port (`:8123`).
 - In **Discovery**, the VM or LXC name is matched against the catalog (`HomeAssistant`, `pihole`, `frigate-nvr`…). When it is recognised, the URL and icon come pre-filled and the item shows the application's icon.
 - Ports and paths are **suggestions** (installations differ); check them before saving. Apps without a web UI (MQTT broker, Docker, Debian…) only bring the icon.
 - Icons come from [dashboard-icons](https://github.com/homarr-labs/dashboard-icons) (Apache-2.0); the marks belong to their owners. See the `NOTICE` file.
-
-### Appearance (per user)
-
-Under **Appearance**, each person chooses, for their own account and on any device:
-
-- **Theme**: automatic (follow the device), light or dark.
-- **Accent colour**: eight presets or any other colour (the text on top switches between white and dark to keep contrast).
-- **Gear menu**: Services, Groups, Discovery, Users, Appearance, My devices and Sign out live in a drop-down under the ⚙ icon in the header (closes with Esc or a click elsewhere).
-- **Custom icon**: under **Services** (and when approving a discovered machine) pick **Or upload an image from your computer** (PNG, JPEG, WebP, GIF or SVG, up to 512 KB). The image is stored in HomeView's database, identical images are stored once, and an image is removed when no service uses it any more.
-- **Rearranging (admin)**: on the dashboard, **Rearrange** (in the ⚙ menu) lets you drag cards between groups and use the ⠿ handle to move groups; the keyboard works too (Alt + ↑/↓). The order is saved immediately. The dashboard uses two columns of groups on wide screens (one on narrow ones), and each group shows at most two columns of cards.
-- **Collapsing groups**: click a group name to hide its cards and save space. The choice is remembered in this browser, and searching expands groups automatically.
-- **YAML editor (admin)**: ⚙ menu → **Edit YAML**. Groups and services show up as text; **Check** previews the changes and **Apply** saves them (anything missing from the file is removed). You can download `homeview.yml`. Proxmox connections, users and discovery are not included. Configuration lives in the SQLite file `homeview.db`, in the Docker volume `homeview-data` (`/data`).
-- **Built-in backgrounds**: 11 original images (Starry sky is the default, together with the dark theme; "No background" is also an option). Regenerate with `python3 tools/backgrounds/gen.py <dir>` (needs Pillow and numpy).
-- **Your own background image**: PNG, JPEG or WebP up to 3 MB, with a fade control to keep text readable. The image lives in the database (the `/data` volume), is only served to its owner, and SVG is not accepted.
 
 ### Proxmox discovery
 
@@ -138,21 +141,24 @@ Good to know:
 - **Syncing**: automatic every `HOMEVIEW_DISCOVERY_INTERVAL` and manual with the button. Items that vanish from Proxmox are flagged and you decide whether to forget them; an item comes back by itself if it reappears. Deleting a service returns its item to the "New" list. "Ignored" items can be restored.
 - **Status**: services that came from Proxmox show a dot on the card (green = running, hollow = stopped), based on the last sync.
 
-### Setting up e-mail
+### Building the dashboard (admin)
 
-The sign-in code is sent over SMTP, so a dedicated account is a good idea.
+Once users, groups and services exist (⚙ menu), these tools help you shape the dashboard. Only administrators see them.
 
-- **Gmail**: enable 2-step verification and create an *app password*. Use `smtp.gmail.com`, port `587`, `starttls`, user = your address, password = the app password.
-- **Other providers** (Brevo, Mailgun, Office 365, your own server): use the SMTP details they give you. For port 465 set `HOMEVIEW_SMTP_SECURITY=tls`.
-- **Unencrypted local relay** (e.g. Postfix on your LAN): `HOMEVIEW_SMTP_SECURITY=none`. Do not use this on networks you do not control.
+- **Custom icon**: under **Services** (and when approving a discovered machine) pick **Or upload an image from your computer** (PNG, JPEG, WebP, GIF or SVG, up to 512 KB). The image is stored in HomeView's database, identical images are stored once, and an image is removed when no service uses it any more.
+- **Rearranging (admin)**: on the dashboard, **Rearrange** (in the ⚙ menu) lets you drag cards between groups and use the ⠿ handle to move groups; the keyboard works too (Alt + ↑/↓). The order is saved immediately. The dashboard uses two columns of groups on wide screens (one on narrow ones), and each group shows at most two columns of cards.
+- **YAML editor (admin)**: ⚙ menu → **Edit YAML**. Groups and services show up as text; **Check** previews the changes and **Apply** saves them (anything missing from the file is removed). You can download `homeview.yml`. Proxmox connections, users and discovery are not included. Configuration lives in the SQLite file `homeview.db`, in the Docker volume `homeview-data` (`/data`).
 
-HomeView **refuses** to send credentials over an unencrypted connection.
+### Appearance and daily use (per user)
 
-### Behind a reverse proxy or Cloudflare Tunnel
+Under ⚙ menu → **Appearance**, each person chooses, for their own account and on any device:
 
-1. Publish the container (port 8080) through the proxy/tunnel and set `HOMEVIEW_BASE_URL=https://dash.example.com`.
-2. The proxy must **preserve the `Host` header** (Nginx: `proxy_set_header Host $host;`). Cloudflare Tunnel already does. The `Host` decides between internal and external links.
-3. Always use HTTPS away from home.
+- **Theme**: automatic (follow the device), light or dark.
+- **Accent colour**: eight presets or any other colour (the text on top switches between white and dark to keep contrast).
+- **Gear menu**: Services, Groups, Edit YAML, Discovery, Users, Appearance, My devices and Sign out live in a drop-down under the ⚙ icon in the header (closes with Esc or a click elsewhere).
+- **Collapsing groups**: click a group name to hide its cards and save space. The choice is remembered in this browser, and searching expands groups automatically.
+- **Built-in backgrounds**: 11 original images (Starry sky is the default, together with the dark theme; "No background" is also an option). Regenerate with `python3 tools/backgrounds/gen.py <dir>` (needs Pillow and numpy).
+- **Your own background image**: PNG, JPEG or WebP up to 3 MB, with a fade control to keep text readable. The image lives in the database (the `/data` volume), is only served to its owner, and SVG is not accepted.
 
 ## Day to day
 
