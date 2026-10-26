@@ -191,6 +191,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 		s.serverError(w, r, sess, err)
 		return
 	}
+	visible := visibleGroups(groups, sess.User)
 	guestByID := map[int64]store.Guest{}
 	for _, g := range guests {
 		guestByID[g.ID] = g
@@ -205,7 +206,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 	var items []item
 	for _, sv := range services {
 		l := ChooseLinks(sv)
-		if l.Primary == "" {
+		if l.Primary == "" || (sv.GroupID != 0 && !visible[sv.GroupID]) {
 			continue
 		}
 		v := serviceView{ID: sv.ID, Name: sv.Name, Description: sv.Description, Primary: l.Primary, Secondary: l.Secondary}
@@ -246,7 +247,24 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 			return a.VMID < b.VMID
 		})
 		byGuest := map[int64]*groupView{}
+		nodeSec := map[string]*groupView{}
+		nodeAddr := map[string]string{}
+		if nodes, err := s.st.ListNodes(ctx); err == nil {
+			for _, n := range nodes {
+				nodeAddr[n.Name] = n.Addr
+			}
+		}
+		for _, it := range items { // host services: one section per Proxmox node
+			if it.sv.GuestID == 0 && it.sv.Node != "" && nodeSec[it.sv.Node] == nil {
+				nodeSec[it.sv.Node] = &groupView{Key: "n" + it.sv.Node, Name: "Proxmox " + it.sv.Node, Sub: nodeAddr[it.sv.Node]}
+			}
+		}
+		nodeDone := map[string]bool{}
 		for _, g := range guests {
+			if ns := nodeSec[g.Node]; ns != nil && !nodeDone[g.Node] { // a node comes before its machines
+				sections = append(sections, ns)
+				nodeDone[g.Node] = true
+			}
 			kind := "LXC"
 			if g.Kind == "qemu" {
 				kind = "VM"
@@ -262,10 +280,22 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 			byGuest[g.ID] = gv
 			sections = append(sections, gv)
 		}
+		var extra []string // nodes without any discovered machine
+		for name := range nodeSec {
+			if !nodeDone[name] {
+				extra = append(extra, name)
+			}
+		}
+		sort.Strings(extra)
+		for _, name := range extra {
+			sections = append(sections, nodeSec[name])
+		}
 		loose := &groupView{Key: "i0", Name: i18n.T(lang, "dash.nomachine")}
 		for _, it := range items {
 			if gv, ok := byGuest[it.sv.GuestID]; ok && it.sv.GuestID != 0 {
 				add(gv, it)
+			} else if ns := nodeSec[it.sv.Node]; ns != nil && it.sv.GuestID == 0 {
+				add(ns, it)
 			} else {
 				add(loose, it)
 			}
@@ -280,14 +310,19 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 		}
 		for _, it := range items {
 			c := catalog.CatOther
-			if app, ok := catalog.FromIcon(it.sv.Icon); ok {
+			if it.sv.Type != "" && by[it.sv.Type] != nil {
+				c = it.sv.Type
+			} else if app, ok := catalog.FromIcon(it.sv.Icon); ok {
 				c = catalog.Category(app.ID)
 			}
 			add(by[c], it)
 		}
 	default:
 		byGroup := map[int64]*groupView{}
-		for _, g := range groups {
+		for _, g := range withPaths(groups) {
+			if !visible[g.ID] {
+				continue
+			}
 			gv := &groupView{ID: g.ID, Key: strconv.FormatInt(g.ID, 10), Name: g.Name}
 			byGroup[g.ID] = gv
 			sections = append(sections, gv)

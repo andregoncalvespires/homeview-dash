@@ -43,6 +43,7 @@ type adminServicesData struct {
 	NewGroup string        // text typed in "or create a new group", kept across a failed save
 	Origins  []originOpt   // machines and Proxmox hosts a service can run on
 	IconURL  string        // preview of the icon being edited, if it is an image
+	Cats     []string      // service categories for the "type" picker
 }
 
 // originOpt is one entry of the "where does it run" picker.
@@ -63,13 +64,14 @@ func (s *Server) loadServicesPage(r *http.Request, edit store.Service) (adminSer
 	if err != nil {
 		return adminServicesData{}, err
 	}
+	groups = withPaths(groups)
 	names := map[int64]string{}
 	for _, g := range groups {
 		names[g.ID] = g.Name
 	}
-	data := adminServicesData{Edit: edit, Groups: groups, Apps: catalog.All()}
+	data := adminServicesData{Edit: edit, Groups: groups, Apps: catalog.All(), Cats: catalog.Categories}
 	data.IconURL, _ = resolveIcon(edit.Icon)
-	if data.Origins, err = s.origins(r.Context(), edit.GuestID); err != nil {
+	if data.Origins, err = s.origins(r.Context(), edit.GuestID, edit.Node); err != nil {
 		return adminServicesData{}, err
 	}
 	for _, sv := range services {
@@ -116,6 +118,8 @@ func validateService(v *store.Service) string {
 		return "err.url"
 	case !validIcon(v.Icon):
 		return "err.icon"
+	case !validType(v.Type):
+		return "err.type"
 	}
 	return ""
 }
@@ -135,7 +139,12 @@ func (s *Server) saveService(w http.ResponseWriter, r *http.Request, sess *sessi
 	if gid, err := strconv.ParseInt(r.PostFormValue("group_id"), 10, 64); err == nil && gid > 0 {
 		v.GroupID = gid
 	}
-	v.GuestID = guestFromOrigin(r.PostFormValue("origin"))
+	v.Type = strings.TrimSpace(r.PostFormValue("type"))
+	origin := r.PostFormValue("origin")
+	v.GuestID = guestFromOrigin(origin)
+	if v.GuestID == 0 {
+		v.Node = s.nodeFromOrigin(r.Context(), origin)
+	}
 	newGroup, groupOK := store.CleanText(r.PostFormValue("new_group"), 80)
 
 	// An image sent from the computer replaces whatever the icon field says.
@@ -229,20 +238,100 @@ func (s *Server) deleteService(w http.ResponseWriter, r *http.Request, sess *ses
 
 // ---- groups ----
 
-type adminGroupsData struct{ Groups []store.Group }
+type groupRow struct {
+	store.Group
+	Parents []parentOpt // possible parents (top-level groups other than itself), when it may have one
+	Users   []userOpt
+}
+
+type parentOpt struct {
+	ID       int64
+	Name     string
+	Selected bool
+}
+
+type userOpt struct {
+	ID      int64
+	Name    string
+	Email   string
+	Checked bool
+}
+
+type adminGroupsData struct {
+	Rows    []groupRow
+	Parents []parentOpt // for the "new group" form
+	Users   []userOpt
+}
+
+func (s *Server) loadGroupsPage(ctx context.Context) (adminGroupsData, error) {
+	groups, err := s.st.ListGroups(ctx)
+	if err != nil {
+		return adminGroupsData{}, err
+	}
+	users, err := s.st.ListUsers(ctx)
+	if err != nil {
+		return adminGroupsData{}, err
+	}
+	hasChild := map[int64]bool{}
+	for _, g := range groups {
+		if g.ParentID != 0 {
+			hasChild[g.ParentID] = true
+		}
+	}
+	data := adminGroupsData{}
+	for _, g := range groups {
+		if g.ParentID == 0 {
+			data.Parents = append(data.Parents, parentOpt{ID: g.ID, Name: g.Name})
+		}
+	}
+	userOpts := func(g *store.Group) []userOpt {
+		var out []userOpt
+		for _, u := range users {
+			if u.IsAdmin() { // administrators always see everything
+				continue
+			}
+			o := userOpt{ID: u.ID, Name: u.Name, Email: u.Email}
+			if g != nil {
+				for _, id := range g.UserIDs {
+					if id == u.ID {
+						o.Checked = true
+					}
+				}
+			}
+			out = append(out, o)
+		}
+		return out
+	}
+	data.Users = userOpts(nil)
+	for i := range groups {
+		g := groups[i]
+		row := groupRow{Group: g, Users: userOpts(&g)}
+		if !hasChild[g.ID] { // a group with sub-groups stays at the top
+			for _, p := range data.Parents {
+				if p.ID != g.ID {
+					p.Selected = p.ID == g.ParentID
+					row.Parents = append(row.Parents, p)
+				}
+			}
+		}
+		data.Rows = append(data.Rows, row)
+	}
+	return data, nil
+}
 
 func (s *Server) getAdminGroups(w http.ResponseWriter, r *http.Request, sess *session) {
-	groups, err := s.st.ListGroups(r.Context())
+	data, err := s.loadGroupsPage(r.Context())
 	if err != nil {
 		s.serverError(w, r, sess, err)
 		return
 	}
-	s.render(w, r, sess, "admin_groups", http.StatusOK, &page{TitleKey: "admin.groups.title", Data: adminGroupsData{Groups: groups}})
+	s.render(w, r, sess, "admin_groups", http.StatusOK, &page{TitleKey: "admin.groups.title", Data: data})
 }
 
 func (s *Server) saveGroup(w http.ResponseWriter, r *http.Request, sess *session) {
+	ctx := r.Context()
 	name, ok := store.CleanText(r.PostFormValue("name"), 80)
-	g := store.Group{Name: name, Position: formInt(r, "position")}
+	g := store.Group{Name: name, Position: formInt(r, "position"), Restricted: r.PostFormValue("restricted") != ""}
 	if !ok || g.Name == "" {
 		http.Redirect(w, r, "/admin/groups?err=err.name", http.StatusSeeOther)
 		return
@@ -250,7 +339,46 @@ func (s *Server) saveGroup(w http.ResponseWriter, r *http.Request, sess *session
 	if id, err := strconv.ParseInt(r.PostFormValue("id"), 10, 64); err == nil && id > 0 {
 		g.ID = id
 	}
-	if err := s.st.SaveGroup(r.Context(), &g); err != nil && !errors.Is(err, store.ErrNotFound) {
+	groups, err := s.st.ListGroups(ctx)
+	if err != nil {
+		s.serverError(w, r, sess, err)
+		return
+	}
+	byID := map[int64]store.Group{}
+	for _, x := range groups {
+		byID[x.ID] = x
+	}
+	if pid, err := strconv.ParseInt(r.PostFormValue("parent_id"), 10, 64); err == nil && pid > 0 {
+		parent, exists := byID[pid]
+		hasChild := false
+		for _, x := range groups {
+			if x.ParentID == g.ID && g.ID != 0 {
+				hasChild = true
+			}
+		}
+		if !exists || parent.ParentID != 0 || pid == g.ID || hasChild { // one level only
+			http.Redirect(w, r, "/admin/groups?err=err.parent", http.StatusSeeOther)
+			return
+		}
+		g.ParentID = pid
+	}
+	if g.Restricted {
+		users, err := s.st.ListUsers(ctx)
+		if err != nil {
+			s.serverError(w, r, sess, err)
+			return
+		}
+		ok := map[int64]bool{}
+		for _, u := range users {
+			ok[u.ID] = !u.IsAdmin()
+		}
+		for _, raw := range r.PostForm["users"] {
+			if uid, err := strconv.ParseInt(raw, 10, 64); err == nil && ok[uid] {
+				g.UserIDs = append(g.UserIDs, uid)
+			}
+		}
+	}
+	if err := s.st.SaveGroup(ctx, &g); err != nil && !errors.Is(err, store.ErrNotFound) {
 		s.serverError(w, r, sess, err)
 		return
 	}
@@ -345,7 +473,7 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request, sess *sessio
 // the service to them) and the Proxmox hosts themselves (address only).
 // keep is a guest that stays listed even when it is gone or ignored, so an
 // existing service still shows where it belongs.
-func (s *Server) origins(ctx context.Context, keep int64) ([]originOpt, error) {
+func (s *Server) origins(ctx context.Context, keep int64, keepNode string) ([]originOpt, error) {
 	guests, err := s.st.ListGuests(ctx)
 	if err != nil {
 		return nil, err
@@ -373,7 +501,7 @@ func (s *Server) origins(ctx context.Context, keep int64) ([]originOpt, error) {
 		if n.Addr == "" {
 			continue
 		}
-		out = append(out, originOpt{Value: "h:" + n.Addr, Label: "Proxmox " + n.Name + " · " + n.Addr, Addr: n.Addr, Host: true})
+		out = append(out, originOpt{Value: "h:" + n.Addr, Label: "Proxmox " + n.Name + " · " + n.Addr, Addr: n.Addr, Host: true, Selected: keep == 0 && keepNode != "" && n.Name == keepNode})
 	}
 	return out, nil
 }
@@ -386,4 +514,51 @@ func guestFromOrigin(v string) int64 {
 		}
 	}
 	return 0
+}
+
+// nodeFromOrigin returns the Proxmox node an origin value ("h:<addr>") names, else "".
+func (s *Server) nodeFromOrigin(ctx context.Context, v string) string {
+	addr, ok := strings.CutPrefix(v, "h:")
+	if !ok || addr == "" {
+		return ""
+	}
+	nodes, err := s.st.ListNodes(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, n := range nodes {
+		if n.Addr == addr {
+			return n.Name
+		}
+	}
+	return ""
+}
+
+// validType accepts "" (taken from the catalog icon) or a category id.
+func validType(t string) bool {
+	if t == "" {
+		return true
+	}
+	for _, c := range catalog.Categories {
+		if c == t {
+			return true
+		}
+	}
+	return false
+}
+
+// withPaths returns the groups with sub-groups named "Parent › Child", for display.
+func withPaths(groups []store.Group) []store.Group {
+	name := map[int64]string{}
+	for _, g := range groups {
+		name[g.ID] = g.Name
+	}
+	out := make([]store.Group, len(groups))
+	copy(out, groups)
+	for i, g := range out {
+		if p, ok := name[g.ParentID]; ok && g.ParentID != 0 {
+			out[i].Name = p + " › " + g.Name
+		}
+	}
+	return out
 }

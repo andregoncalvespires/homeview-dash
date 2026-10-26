@@ -7,33 +7,44 @@
     <input type="hidden" name="csrf" value="{{.CSRF}}">
     <label>{{t .Lang "f.name"}}<input name="name" required maxlength="80"></label>
     <label>{{t .Lang "f.position"}}<input type="number" name="position" value="0" min="-9999" max="9999"></label>
+    {{if .Data.Parents}}<label>{{t .Lang "f.parent"}}
+      <select name="parent_id"><option value="0">{{t .Lang "f.parent_none"}}</option>
+        {{range .Data.Parents}}<option value="{{.ID}}">{{.Name}}</option>{{end}}
+      </select></label>{{end}}
     <button class="btn primary" type="submit">{{t .Lang "f.add"}}</button>
   </form>
 </section>
-<div class="tablewrap">
-<table>
-  <tbody>
-  {{range .Data.Groups}}
-  <tr>
-    <td>
-      <form method="post" action="/admin/groups/save" class="form row">
-        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
-        <input name="name" value="{{.Name}}" required maxlength="80" aria-label="{{t $.Lang "f.name"}}">
-        <input type="number" name="position" value="{{.Position}}" min="-9999" max="9999" aria-label="{{t $.Lang "f.position"}}">
-        <button class="btn small" type="submit">{{t $.Lang "f.save"}}</button>
-      </form>
-    </td>
-    <td class="right">
-      <form method="post" action="/admin/groups/delete" class="inline" data-confirm="{{t $.Lang "f.confirm"}}">
-        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
-        <button class="btn small danger" type="submit">{{t $.Lang "f.delete"}}</button>
-      </form>
-    </td>
-  </tr>
-  {{else}}
-  <tr><td class="muted">{{t $.Lang "admin.groups.none"}}</td></tr>
-  {{end}}
-  </tbody>
-</table>
+<div class="groupcards">
+{{range .Data.Rows}}
+<section class="panel groupcard">
+  <form method="post" action="/admin/groups/save" class="form">
+    <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+    <div class="row">
+      <label>{{t $.Lang "f.name"}}<input name="name" value="{{.Name}}" required maxlength="80"></label>
+      <label>{{t $.Lang "f.position"}}<input type="number" name="position" value="{{.Position}}" min="-9999" max="9999"></label>
+      {{if .Parents}}<label>{{t $.Lang "f.parent"}}
+        <select name="parent_id"><option value="0">{{t $.Lang "f.parent_none"}}</option>
+          {{range .Parents}}<option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select></label>{{end}}
+    </div>
+    <label class="check"><input type="checkbox" name="restricted" value="1"{{if .Restricted}} checked{{end}}> {{t $.Lang "f.restricted"}}</label>
+    <details class="access"{{if .Restricted}} open{{end}}>
+      <summary>{{t $.Lang "f.who_sees"}}</summary>
+      <p class="muted">{{t $.Lang "f.who_sees_help"}}</p>
+      {{range .Users}}<label class="check"><input type="checkbox" name="users" value="{{.ID}}"{{if .Checked}} checked{{end}}> {{.Name}} <span class="muted">{{.Email}}</span></label>
+      {{else}}<p class="muted">{{t $.Lang "f.no_other_users"}}</p>{{end}}
+    </details>
+    <div class="row">
+      <button class="btn small" type="submit">{{t $.Lang "f.save"}}</button>
+    </div>
+  </form>
+  <form method="post" action="/admin/groups/delete" class="inline" data-confirm="{{t $.Lang "f.confirm"}}">
+    <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+    <button class="btn small danger" type="submit">{{t $.Lang "f.delete"}}</button>
+  </form>
+</section>
+{{else}}
+<p class="muted">{{t $.Lang "admin.groups.none"}}</p>
+{{end}}
 </div>
 {{end}}

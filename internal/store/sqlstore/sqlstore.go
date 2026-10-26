@@ -39,10 +39,13 @@ var schemaV6 string
 //go:embed schema_v7.sql
 var schemaV7 string
 
+//go:embed schema_v8.sql
+var schemaV8 string
+
 const splitMarker = "-- +split"
 
 // migrations are applied in order; PRAGMA user_version records how many ran.
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7}
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8}
 
 // Store is the SQLite-backed store.
 type Store struct{ db *sql.DB }
@@ -375,44 +378,125 @@ func (s *Store) DeleteDevice(ctx context.Context, id int64) error {
 
 // ---- groups ----
 
+const groupCols = `id, name, position, parent_id, restricted`
+
+func scanGroup(r scanner) (store.Group, error) {
+	var g store.Group
+	var parent sql.NullInt64
+	var restricted int
+	err := r.Scan(&g.ID, &g.Name, &g.Position, &parent, &restricted)
+	g.ParentID, g.Restricted = parent.Int64, restricted != 0
+	return g, err
+}
+
 func (s *Store) ListGroups(ctx context.Context) ([]store.Group, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, name, position FROM svc_groups ORDER BY position, LOWER(name), id`)
+		`SELECT `+groupCols+` FROM svc_groups ORDER BY position, LOWER(name), id`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 	var out []store.Group
 	for rows.Next() {
-		var g store.Group
-		if err := rows.Scan(&g.ID, &g.Name, &g.Position); err != nil {
+		g, err := scanGroup(rows)
+		if err != nil {
+			rows.Close()
 			return nil, err
 		}
 		out = append(out, g)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	rows.Close()
+	access, err := s.db.QueryContext(ctx, `SELECT group_id, user_id FROM group_users ORDER BY group_id, user_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer access.Close()
+	byGroup := map[int64][]int64{}
+	for access.Next() {
+		var gid, uid int64
+		if err := access.Scan(&gid, &uid); err != nil {
+			return nil, err
+		}
+		byGroup[gid] = append(byGroup[gid], uid)
+	}
+	for i := range out {
+		out[i].UserIDs = byGroup[out[i].ID]
+	}
+	return out, access.Err()
 }
 
 func (s *Store) GetGroup(ctx context.Context, id int64) (*store.Group, error) {
-	var g store.Group
-	err := s.db.QueryRowContext(ctx, `SELECT id, name, position FROM svc_groups WHERE id = ?`, id).
-		Scan(&g.ID, &g.Name, &g.Position)
+	g, err := scanGroup(s.db.QueryRowContext(ctx, `SELECT `+groupCols+` FROM svc_groups WHERE id = ?`, id))
 	if isNoRows(err) {
 		return nil, store.ErrNotFound
 	}
-	return &g, err
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT user_id FROM group_users WHERE group_id = ? ORDER BY user_id`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var uid int64
+		if err := rows.Scan(&uid); err != nil {
+			return nil, err
+		}
+		g.UserIDs = append(g.UserIDs, uid)
+	}
+	return &g, rows.Err()
 }
 
 func (s *Store) SaveGroup(ctx context.Context, g *store.Group) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	restricted := 0
+	if g.Restricted {
+		restricted = 1
+	}
 	if g.ID == 0 {
-		res, err := s.db.ExecContext(ctx, `INSERT INTO svc_groups(name, position) VALUES(?, ?)`, g.Name, g.Position)
+		res, err := tx.ExecContext(ctx, `INSERT INTO svc_groups(name, position, parent_id, restricted) VALUES(?, ?, ?, ?)`,
+			g.Name, g.Position, nullID(g.ParentID), restricted)
+		if isFK(err) {
+			return store.ErrNotFound
+		}
 		if err != nil {
 			return err
 		}
-		g.ID, err = res.LastInsertId()
-		return err
+		if g.ID, err = res.LastInsertId(); err != nil {
+			return err
+		}
+	} else {
+		if g.ParentID == g.ID {
+			return store.ErrNotFound
+		}
+		if err := affected(tx.ExecContext(ctx, `UPDATE svc_groups SET name = ?, position = ?, parent_id = ?, restricted = ? WHERE id = ?`,
+			g.Name, g.Position, nullID(g.ParentID), restricted, g.ID)); err != nil {
+			if isFK(err) {
+				return store.ErrNotFound
+			}
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM group_users WHERE group_id = ?`, g.ID); err != nil {
+			return err
+		}
 	}
-	return affected(s.db.ExecContext(ctx, `UPDATE svc_groups SET name = ?, position = ? WHERE id = ?`, g.Name, g.Position, g.ID))
+	for _, uid := range g.UserIDs {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO group_users(group_id, user_id) VALUES(?, ?)`, g.ID, uid); err != nil {
+			if isFK(err) {
+				return store.ErrNotFound
+			}
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *Store) DeleteGroup(ctx context.Context, id int64) error {
@@ -421,12 +505,12 @@ func (s *Store) DeleteGroup(ctx context.Context, id int64) error {
 
 // ---- services ----
 
-const serviceCols = `id, name, description, icon, internal_url, external_url, group_id, position, guest_id`
+const serviceCols = `id, name, description, icon, internal_url, external_url, group_id, position, guest_id, type, node`
 
 func scanService(r scanner) (*store.Service, error) {
 	var v store.Service
 	var gid, guest sql.NullInt64
-	if err := r.Scan(&v.ID, &v.Name, &v.Description, &v.Icon, &v.InternalURL, &v.ExternalURL, &gid, &v.Position, &guest); err != nil {
+	if err := r.Scan(&v.ID, &v.Name, &v.Description, &v.Icon, &v.InternalURL, &v.ExternalURL, &gid, &v.Position, &guest, &v.Type, &v.Node); err != nil {
 		if isNoRows(err) {
 			return nil, store.ErrNotFound
 		}
@@ -461,9 +545,9 @@ func (s *Store) GetService(ctx context.Context, id int64) (*store.Service, error
 func (s *Store) SaveService(ctx context.Context, v *store.Service) error {
 	if v.ID == 0 {
 		res, err := s.db.ExecContext(ctx,
-			`INSERT INTO services(name, description, icon, internal_url, external_url, group_id, position, guest_id)
-			 VALUES(?, ?, ?, ?, ?, ?, ?, ?)`,
-			v.Name, v.Description, v.Icon, v.InternalURL, v.ExternalURL, nullID(v.GroupID), v.Position, nullID(v.GuestID))
+			`INSERT INTO services(name, description, icon, internal_url, external_url, group_id, position, guest_id, type, node)
+			 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			v.Name, v.Description, v.Icon, v.InternalURL, v.ExternalURL, nullID(v.GroupID), v.Position, nullID(v.GuestID), v.Type, v.Node)
 		if isFK(err) {
 			return store.ErrNotFound
 		}
@@ -475,8 +559,8 @@ func (s *Store) SaveService(ctx context.Context, v *store.Service) error {
 	}
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE services SET name = ?, description = ?, icon = ?, internal_url = ?, external_url = ?,
-		   group_id = ?, position = ?, guest_id = ? WHERE id = ?`,
-		v.Name, v.Description, v.Icon, v.InternalURL, v.ExternalURL, nullID(v.GroupID), v.Position, nullID(v.GuestID), v.ID)
+		   group_id = ?, position = ?, guest_id = ?, type = ?, node = ? WHERE id = ?`,
+		v.Name, v.Description, v.Icon, v.InternalURL, v.ExternalURL, nullID(v.GroupID), v.Position, nullID(v.GuestID), v.Type, v.Node, v.ID)
 	if isFK(err) {
 		return store.ErrNotFound
 	}

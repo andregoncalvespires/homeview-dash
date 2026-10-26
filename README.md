@@ -4,7 +4,7 @@
 
 [English](README.en.md) · **Português (Brasil)**
 
-![licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue) ![status](https://img.shields.io/badge/status-v0.5%20em%20desenvolvimento-orange)
+![licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue) ![status](https://img.shields.io/badge/status-v0.7%20em%20desenvolvimento-orange)
 
 ## O que é
 
@@ -16,15 +16,16 @@ O HomeView é uma alternativa simples a painéis como Heimdall e Homarr, pensada
 - **Dois endereços por serviço** (interno e externo). O painel destaca o endereço certo conforme você acessa de casa ou de fora, e mostra o outro como atalho.
 - **Interface em português e inglês**, clara no tema claro e no escuro, com busca instantânea (tecle `/`).
 
-### O que já funciona (v0.5)
+### O que já funciona (v0.7)
 
 - **Login sem senha**: código por e-mail + cookie por dispositivo, com a tela "Meus dispositivos" para revogar. Link de acesso único pelo console, para recuperação caso o e-mail falhe.
 - **Administrador criado pelo console**, sem gravar nada no `docker-compose.yml`.
 - **Usuários, grupos e serviços** (nome, descrição, ícone, URL interna, URL externa), com **catálogo de 35 aplicações** (ícone e porta sugerida) ou **ícone próprio** enviado do computador.
 - **Descoberta pelo Proxmox**: lê as VMs e LXCs do seu servidor ou cluster; você aprova o que vai para o painel, **com vários serviços por VM/LXC** e a possibilidade de apontar para o **IP do próprio host Proxmox**. O ponto verde/cinza mostra se estão rodando.
-- **Três visões do painel** (ícone de camadas ao lado da engrenagem): **Grupos** (os seus), **Infraestrutura** (por VM/LXC do Proxmox, com status e IP) e **Tipo** (Automação, Rede, Mídia…). A escolha fica salva no navegador.
+- **Três visões do painel** (ícone de camadas ao lado da engrenagem): **Grupos** (os seus), **Infraestrutura** (por VM/LXC do Proxmox, com status e IP) e **Tipo** (Automação, Rede, Mídia…, com o tipo editável por serviço). A escolha fica salva no navegador.
 - **Painel organizável**: reorganizar arrastando cards e grupos (duas colunas de grupos), **recolher/expandir grupos** (lembrado no navegador) e busca instantânea.
-- **Editor YAML** de grupos e serviços, com validação antes de aplicar e download do arquivo.
+- **Subgrupos e permissões por grupo**: um grupo pode ser restrito a administradores e às pessoas escolhidas (vale também para os subgrupos e em todas as visões).
+- **Editor YAML** de grupos, subgrupos, permissões e serviços, com validação antes de aplicar e download do arquivo.
 - **Aparência por usuário**: tema claro/escuro, cor de destaque e 11 fundos prontos (céu estrelado e tema escuro são o padrão) ou imagem própria.
 - **Menu em engrenagem** (⚙) no cabeçalho com todas as telas.
 
@@ -32,7 +33,7 @@ O HomeView é uma alternativa simples a painéis como Heimdall e Homarr, pensada
 
 | Versão | Entrega |
 |---|---|
-| v0.6 | Subgrupos, tipo editável por serviço, nó Proxmox na visão Infraestrutura e permissões por grupo |
+| v0.8 | A definir (ideias: permissões por papel, histórico de alterações) |
 
 ## Instalação (3 passos)
 
@@ -148,13 +149,19 @@ O ícone de camadas, ao lado da engrenagem, troca a forma de ver o painel: **Gru
 
 A tela de login usa o mesmo visual padrão do painel (tema escuro e céu estrelado).
 
+### Subgrupos e permissões (admin)
+
+Em **Grupos**, cada grupo pode ser **subgrupo de** outro (um nível só; aparece como *Casa › Cozinha*) e pode ser marcado como **Restrito**: então só os administradores e as pessoas marcadas em **Quem vê** enxergam o grupo e os serviços dele. A regra vale para os subgrupos (um subgrupo só aparece se o grupo principal também aparecer) e em todas as visões do painel. Serviços sem grupo continuam visíveis para todos. Administradores sempre veem tudo.
+
+No formulário de **Serviços**, **Tipo** define a categoria da visão *Tipo* (por padrão vem do ícone do catálogo) e, ao escolher o **host do Proxmox** em *Onde roda*, o serviço passa a aparecer na seção do nó na visão *Infraestrutura*.
+
 ### Montando o painel (admin)
 
 Depois de cadastrar usuários, grupos e serviços (menu ⚙), estas ferramentas ajudam a deixar o painel do seu jeito. Só administradores as veem.
 
 - **Ícone próprio**: em **Serviços** (e ao aprovar uma descoberta) escolha **Ou envie uma imagem do computador** (PNG, JPEG, WebP, GIF ou SVG, até 512 KB). A imagem fica guardada no banco do HomeView, imagens iguais são guardadas uma vez e a imagem é apagada quando nenhum serviço a usa mais.
 - **Reorganizar (admin)**: no painel, **Reorganizar** (no menu ⚙) deixa arrastar os cards entre grupos e o ícone ⠿ para mover grupos; também funciona pelo teclado (Alt + ↑/↓). A ordem é salva na hora. O painel usa duas colunas de grupos em telas largas (e uma em telas estreitas), e cada grupo mostra no máximo duas colunas de cards.
-- **Editor YAML (admin)**: no menu ⚙ → **Editar YAML**. Grupos e serviços aparecem como texto; **Validar** mostra o que muda e **Aplicar** grava (o que não estiver no arquivo é removido). Dá para baixar `homeview.yml`. Conexões Proxmox, usuários e a descoberta não entram. A configuração fica no SQLite `homeview.db`, no volume Docker `homeview-data` (`/data`).
+- **Editor YAML (admin)**: no menu ⚙ → **Editar YAML**. Grupos e serviços aparecem como texto; **Validar** mostra o que muda e **Aplicar** grava (o que não estiver no arquivo é removido). Dá para baixar `homeview.yml`. Conexões Proxmox, usuários e a descoberta não entram. Subgrupos ficam em `groups:` dentro do grupo principal, e a permissão usa `restricted: true` e `users:` (e-mails); cada serviço aceita `type:`. A configuração fica no SQLite `homeview.db`, no volume Docker `homeview-data` (`/data`).
 
 ### Aparência e uso (por usuário)
 

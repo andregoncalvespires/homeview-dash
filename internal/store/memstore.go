@@ -149,6 +149,9 @@ func (m *MemStore) DeleteUser(_ context.Context, id int64) error {
 		return ErrNotFound
 	}
 	delete(m.users, id)
+	for _, g := range m.groups {
+		g.UserIDs = removeID(g.UserIDs, id)
+	}
 	delete(m.prefs, id)
 	delete(m.codes, id)
 	for h, l := range m.links {
@@ -285,7 +288,9 @@ func (m *MemStore) ListGroups(_ context.Context) ([]Group, error) {
 	defer m.mu.Unlock()
 	out := make([]Group, 0, len(m.groups))
 	for _, g := range m.groups {
-		out = append(out, *g)
+		cp := *g
+		cp.UserIDs = append([]int64(nil), g.UserIDs...)
+		out = append(out, cp)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Position != out[j].Position {
@@ -304,6 +309,7 @@ func (m *MemStore) GetGroup(_ context.Context, id int64) (*Group, error) {
 		return nil, ErrNotFound
 	}
 	c := *g
+	c.UserIDs = append([]int64(nil), g.UserIDs...)
 	return &c, nil
 }
 
@@ -315,7 +321,18 @@ func (m *MemStore) SaveGroup(_ context.Context, g *Group) error {
 	} else if _, ok := m.groups[g.ID]; !ok {
 		return ErrNotFound
 	}
+	if g.ParentID != 0 {
+		if _, ok := m.groups[g.ParentID]; !ok || g.ParentID == g.ID {
+			return ErrNotFound
+		}
+	}
+	for _, uid := range g.UserIDs {
+		if _, ok := m.users[uid]; !ok {
+			return ErrNotFound
+		}
+	}
 	c := *g
+	c.UserIDs = normalizeIDs(g.UserIDs)
 	m.groups[g.ID] = &c
 	return nil
 }
@@ -327,6 +344,11 @@ func (m *MemStore) DeleteGroup(_ context.Context, id int64) error {
 		return ErrNotFound
 	}
 	delete(m.groups, id)
+	for _, other := range m.groups {
+		if other.ParentID == id {
+			other.ParentID = 0
+		}
+	}
 	for _, s := range m.services {
 		if s.GroupID == id {
 			s.GroupID = 0
@@ -732,4 +754,31 @@ func (m *MemStore) DeleteIcon(_ context.Context, id int64) error {
 	}
 	delete(m.icons, id)
 	return nil
+}
+
+// normalizeIDs returns ids sorted ascending without duplicates.
+func normalizeIDs(ids []int64) []int64 {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := append([]int64(nil), ids...)
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	n := 0
+	for i, v := range out {
+		if i == 0 || v != out[n-1] {
+			out[n] = v
+			n++
+		}
+	}
+	return out[:n]
+}
+
+func removeID(ids []int64, id int64) []int64 {
+	var out []int64
+	for _, v := range ids {
+		if v != id {
+			out = append(out, v)
+		}
+	}
+	return out
 }

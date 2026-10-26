@@ -81,3 +81,28 @@ func TestErrors(t *testing.T) {
 		t.Error("scalar document should fail")
 	}
 }
+
+func TestSubgroupsAccessAndType(t *testing.T) {
+	d := &Doc{Groups: []Group{
+		{ID: 1, Name: "Casa", Restricted: true, Users: []string{"ana@example.com", "b+c@example.com"},
+			Services: []Service{{Name: "HA", Type: "automation", InternalURL: "http://a:1"}},
+			Groups:   []Group{{ID: 2, Name: "Cozinha", Services: []Service{{Name: "Forno", InternalURL: "http://b:2"}}}, {Name: "Sala"}}},
+		{Name: "Rede"},
+	}}
+	got, err := Unmarshal(Marshal(d))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, d) {
+		t.Fatalf("differs:\n%+v\n%+v", got, d)
+	}
+	for n, src := range map[string]string{
+		"deep":      "groups:\n  - name: A\n    groups:\n      - name: B\n        groups:\n          - name: C\n",
+		"badbool":   "groups:\n  - name: A\n    restricted: maybe\n",
+		"usersflat": "groups:\n  - name: A\n    users: ana@example.com\n",
+	} {
+		if _, err := Unmarshal(src); err == nil {
+			t.Errorf("%s: expected error", n)
+		}
+	}
+}

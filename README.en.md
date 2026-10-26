@@ -4,7 +4,7 @@
 
 **English** · [Português (Brasil)](README.md)
 
-![MIT license](https://img.shields.io/badge/license-MIT-blue) ![status](https://img.shields.io/badge/status-v0.5%20in%20development-orange)
+![MIT license](https://img.shields.io/badge/license-MIT-blue) ![status](https://img.shields.io/badge/status-v0.7%20in%20development-orange)
 
 ## What it is
 
@@ -16,15 +16,16 @@ HomeView is a simple alternative to dashboards such as Heimdall and Homarr, buil
 - **Two addresses per service** (internal and external). The dashboard highlights the right one depending on whether you are at home or away, and shows the other as a shortcut.
 - **Portuguese and English UI**, light and dark themes, instant search (press `/`).
 
-### What works today (v0.5)
+### What works today (v0.7)
 
 - **Passwordless sign-in**: e-mail code + per-device cookie, with a "My devices" page to revoke access. A one-time sign-in link from the console is the recovery path if e-mail is down.
 - **Administrator created from the console**, nothing written to `docker-compose.yml`.
 - **Users, groups and services** (name, description, icon, internal URL, external URL), with a **35-application catalog** (icon and suggested port) or a **custom icon** uploaded from your computer.
 - **Proxmox discovery**: reads the VMs and LXCs of your server or cluster; you approve what goes on the dashboard, with **several services per VM/LXC** and the option to point at the **Proxmox host's own IP**. A green/grey dot shows whether they are running.
-- **Three dashboard views** (layers icon next to the gear): **Groups** (your own), **Infrastructure** (by Proxmox VM/LXC, with status and IP) and **Type** (Automation, Network, Media…). The choice is remembered in the browser.
+- **Three dashboard views** (layers icon next to the gear): **Groups** (your own), **Infrastructure** (by Proxmox VM/LXC, with status and IP) and **Type** (Automation, Network, Media…, with an editable type per service). The choice is remembered in the browser.
 - **Organisable dashboard**: rearrange cards and groups by dragging (two columns of groups), **collapse/expand groups** (remembered in the browser) and instant search.
-- **YAML editor** for groups and services, with validation before applying and file download.
+- **Sub-groups and per-group permissions**: a group can be restricted to administrators and the people you choose (applies to its sub-groups and to every view).
+- **YAML editor** for groups, sub-groups, permissions and services, with validation before applying and file download.
 - **Per-user appearance**: light/dark theme, accent colour and 11 built-in backgrounds (starry sky and dark theme are the default) or your own image.
 - **Gear menu** (⚙) in the header with every screen.
 
@@ -32,7 +33,7 @@ HomeView is a simple alternative to dashboards such as Heimdall and Homarr, buil
 
 | Version | Delivery |
 |---|---|
-| v0.6 | Subgroups, editable type per service, Proxmox node in the Infrastructure view and group permissions |
+| v0.8 | To be decided (ideas: role-based permissions, change history) |
 
 ## Install (3 steps)
 
@@ -148,13 +149,19 @@ The layers icon next to the gear switches how the dashboard is shown: **Groups**
 
 The sign-in page uses the same default look as the dashboard (dark theme and starry sky).
 
+### Sub-groups and permissions (admin)
+
+Under **Groups**, a group can be a **sub-group of** another (one level only; shown as *Home › Kitchen*) and can be marked **Restricted**: then only administrators and the people ticked under **Who can see it** see the group and its services. The rule covers sub-groups (a sub-group only shows when its parent does) and every dashboard view. Services without a group stay visible to everyone. Administrators always see everything.
+
+In the **Services** form, **Type** sets the category used by the *Type* view (it comes from the catalog icon by default), and picking a **Proxmox host** under *Where it runs* places the service in that node's section in the *Infrastructure* view.
+
 ### Building the dashboard (admin)
 
 Once users, groups and services exist (⚙ menu), these tools help you shape the dashboard. Only administrators see them.
 
 - **Custom icon**: under **Services** (and when approving a discovered machine) pick **Or upload an image from your computer** (PNG, JPEG, WebP, GIF or SVG, up to 512 KB). The image is stored in HomeView's database, identical images are stored once, and an image is removed when no service uses it any more.
 - **Rearranging (admin)**: on the dashboard, **Rearrange** (in the ⚙ menu) lets you drag cards between groups and use the ⠿ handle to move groups; the keyboard works too (Alt + ↑/↓). The order is saved immediately. The dashboard uses two columns of groups on wide screens (one on narrow ones), and each group shows at most two columns of cards.
-- **YAML editor (admin)**: ⚙ menu → **Edit YAML**. Groups and services show up as text; **Check** previews the changes and **Apply** saves them (anything missing from the file is removed). You can download `homeview.yml`. Proxmox connections, users and discovery are not included. Configuration lives in the SQLite file `homeview.db`, in the Docker volume `homeview-data` (`/data`).
+- **YAML editor (admin)**: ⚙ menu → **Edit YAML**. Groups and services show up as text; **Check** previews the changes and **Apply** saves them (anything missing from the file is removed). You can download `homeview.yml`. Proxmox connections, users and discovery are not included. Sub-groups go under `groups:` inside the parent group, permissions use `restricted: true` and `users:` (e-mails), and each service accepts `type:`. Configuration lives in the SQLite file `homeview.db`, in the Docker volume `homeview-data` (`/data`).
 
 ### Appearance and daily use (per user)
 

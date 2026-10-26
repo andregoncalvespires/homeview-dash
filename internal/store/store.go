@@ -64,9 +64,12 @@ type LoginCode struct {
 
 // Group is a named section of the dashboard.
 type Group struct {
-	ID       int64
-	Name     string
-	Position int
+	ID         int64
+	Name       string
+	Position   int
+	ParentID   int64   // 0 for a top-level group; sub-groups are one level deep
+	Restricted bool    // only administrators and UserIDs may see it (and its sub-groups)
+	UserIDs    []int64 // who may see a restricted group, ascending
 }
 
 // Service is one link shown on the dashboard.
@@ -79,7 +82,9 @@ type Service struct {
 	ExternalURL string
 	GroupID     int64 // 0 means "no group"
 	Position    int
-	GuestID     int64 // discovered VM/container this service runs on, 0 if none (several services may share one)
+	GuestID     int64  // discovered VM/container this service runs on, 0 if none (several services may share one)
+	Type        string // category id (see catalog.Categories); "" means: take it from the catalog icon
+	Node        string // Proxmox node the service runs on directly (host services), "" if none
 }
 
 // Node is a Proxmox host. Addr is its IP (or host name), used to point a

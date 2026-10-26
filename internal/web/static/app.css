@@ -223,3 +223,12 @@ body.searching .group.collapsed .grid, body.reorder .group.collapsed .grid { dis
 .topright { display: flex; align-items: center; gap: .35rem; }
 .group h2 .dot { display: inline-block; vertical-align: middle; margin-left: .5rem; }
 .gsub { margin-left: .6rem; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: .78rem; color: var(--muted); }
+
+.groupcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); gap: 1rem; align-items: start; }
+.groupcard { margin: 0; display: flex; flex-direction: column; gap: .75rem; }
+.groupcard .form { gap: .6rem; }
+details.access { border: 1px solid var(--line); border-radius: 8px; padding: .5rem .75rem; }
+details.access summary { cursor: pointer; font-weight: 600; }
+details.access label.check { justify-content: flex-start; display: flex; align-items: center; padding: .15rem 0; }
+.groupcard label.check, details.access label.check { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: nowrap; gap: .5rem; font-weight: 400; text-align: left; }
+.groupcard label.check input, details.access label.check input { margin: 0; flex: none; }

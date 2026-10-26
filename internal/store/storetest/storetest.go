@@ -23,6 +23,7 @@ func Run(t *testing.T, newStore func(t *testing.T) store.Store) {
 	t.Run("discovery", func(t *testing.T) { testDiscovery(t, newStore(t)) })
 	t.Run("preferences", func(t *testing.T) { testPrefs(t, newStore(t)) })
 	t.Run("icons", func(t *testing.T) { testIcons(t, newStore(t)) })
+	t.Run("group access", func(t *testing.T) { testGroupAccess(t, newStore(t)) })
 }
 
 var ctx = context.Background()
@@ -552,5 +553,69 @@ func testPrefs(t *testing.T, s store.Store) {
 	must(t, s.DeleteUser(ctx, u2.ID))
 	if _, _, err := s.GetBackground(ctx, u2.ID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("background survived the user: %v", err)
+	}
+}
+
+func testGroupAccess(t *testing.T, s store.Store) {
+	ana, err := s.CreateUser(ctx, "ana@example.com", "Ana", store.RoleUser)
+	must(t, err)
+	bob, err := s.CreateUser(ctx, "bob@example.com", "Bob", store.RoleUser)
+	must(t, err)
+
+	parent := &store.Group{Name: "Casa"}
+	must(t, s.SaveGroup(ctx, parent))
+	child := &store.Group{Name: "Cozinha", ParentID: parent.ID, Restricted: true, UserIDs: []int64{bob.ID, ana.ID, ana.ID}}
+	must(t, s.SaveGroup(ctx, child))
+
+	got, err := s.GetGroup(ctx, child.ID)
+	must(t, err)
+	if got.ParentID != parent.ID || !got.Restricted || len(got.UserIDs) != 2 || got.UserIDs[0] != ana.ID || got.UserIDs[1] != bob.ID {
+		t.Fatalf("GetGroup = %+v", got)
+	}
+	all, err := s.ListGroups(ctx)
+	must(t, err)
+	for _, g := range all {
+		switch g.ID {
+		case parent.ID:
+			if g.ParentID != 0 || g.Restricted || len(g.UserIDs) != 0 {
+				t.Fatalf("parent = %+v", g)
+			}
+		case child.ID:
+			if g.ParentID != parent.ID || len(g.UserIDs) != 2 {
+				t.Fatalf("child = %+v", g)
+			}
+		}
+	}
+
+	// Saving replaces the list of users.
+	child.UserIDs = []int64{ana.ID}
+	must(t, s.SaveGroup(ctx, child))
+	if got, _ = s.GetGroup(ctx, child.ID); len(got.UserIDs) != 1 || got.UserIDs[0] != ana.ID {
+		t.Fatalf("after replace = %+v", got)
+	}
+	// Unknown parent or user is refused and changes nothing.
+	isErr(t, s.SaveGroup(ctx, &store.Group{Name: "X", ParentID: 9999}), store.ErrNotFound)
+	isErr(t, s.SaveGroup(ctx, &store.Group{ID: child.ID, Name: "Cozinha", Restricted: true, UserIDs: []int64{9999}}), store.ErrNotFound)
+	if got, _ = s.GetGroup(ctx, child.ID); len(got.UserIDs) != 1 || got.ParentID != parent.ID {
+		t.Fatalf("failed save changed the group: %+v", got)
+	}
+
+	// Removing a user drops the grant; removing the parent frees the child.
+	must(t, s.DeleteUser(ctx, ana.ID))
+	if got, _ = s.GetGroup(ctx, child.ID); len(got.UserIDs) != 0 {
+		t.Fatalf("user grant survived: %+v", got)
+	}
+	must(t, s.DeleteGroup(ctx, parent.ID))
+	if got, _ = s.GetGroup(ctx, child.ID); got.ParentID != 0 {
+		t.Fatalf("child kept a deleted parent: %+v", got)
+	}
+
+	// Type and node round-trip on services.
+	sv := &store.Service{Name: "Host", InternalURL: "http://10.0.0.2:8006", Type: "infra", Node: "pve1"}
+	must(t, s.SaveService(ctx, sv))
+	back, err := s.GetService(ctx, sv.ID)
+	must(t, err)
+	if back.Type != "infra" || back.Node != "pve1" {
+		t.Fatalf("service = %+v", back)
 	}
 }

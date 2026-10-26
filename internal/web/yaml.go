@@ -23,8 +23,9 @@ type yamlPlan struct {
 }
 
 type planGroup struct {
-	g    store.Group // ID 0 when new
-	svcs []planSvc
+	g      store.Group // ID 0 when new
+	parent int         // index of the parent in the plan, -1 for a top-level group
+	svcs   []planSvc
 }
 
 type planSvc struct {
@@ -43,21 +44,69 @@ func (s *Server) exportYAML(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	doc := &yamlcfg.Doc{}
-	idx := map[int64]int{}
-	for i, g := range groups {
-		idx[g.ID] = i
-		doc.Groups = append(doc.Groups, yamlcfg.Group{ID: g.ID, Name: g.Name})
+	users, err := s.st.ListUsers(ctx)
+	if err != nil {
+		return "", err
+	}
+	email := map[int64]string{}
+	for _, u := range users {
+		email[u.ID] = u.Email
+	}
+	bySvc := map[int64][]yamlcfg.Service{}
+	var loose []yamlcfg.Service
+	known := map[int64]bool{}
+	for _, g := range groups {
+		known[g.ID] = true
 	}
 	for _, sv := range services {
-		y := yamlcfg.Service{ID: sv.ID, Name: sv.Name, Description: sv.Description, Icon: sv.Icon, InternalURL: sv.InternalURL, ExternalURL: sv.ExternalURL}
-		if i, ok := idx[sv.GroupID]; ok && sv.GroupID != 0 {
-			doc.Groups[i].Services = append(doc.Groups[i].Services, y)
+		y := yamlcfg.Service{ID: sv.ID, Name: sv.Name, Description: sv.Description, Icon: sv.Icon, Type: sv.Type, InternalURL: sv.InternalURL, ExternalURL: sv.ExternalURL}
+		if sv.GroupID != 0 && known[sv.GroupID] {
+			bySvc[sv.GroupID] = append(bySvc[sv.GroupID], y)
 		} else {
-			doc.Ungrouped = append(doc.Ungrouped, y)
+			loose = append(loose, y)
+		}
+	}
+	conv := func(g store.Group) yamlcfg.Group {
+		y := yamlcfg.Group{ID: g.ID, Name: g.Name, Restricted: g.Restricted, Services: bySvc[g.ID]}
+		for _, uid := range g.UserIDs {
+			if e, ok := email[uid]; ok {
+				y.Users = append(y.Users, e)
+			}
+		}
+		return y
+	}
+	doc := &yamlcfg.Doc{Ungrouped: loose}
+	top := map[int64]int{}
+	for _, g := range groups {
+		if g.ParentID == 0 || !known[g.ParentID] {
+			top[g.ID] = len(doc.Groups)
+			doc.Groups = append(doc.Groups, conv(g))
+		}
+	}
+	for _, g := range groups {
+		if i, ok := top[g.ParentID]; ok && g.ParentID != 0 {
+			doc.Groups[i].Groups = append(doc.Groups[i].Groups, conv(g))
 		}
 	}
 	return yamlcfg.Marshal(doc), nil
+}
+
+type flatGroup struct {
+	y      yamlcfg.Group
+	parent int // index in the flat list, -1 for top level
+}
+
+// flatten lists every group of the document, each parent right before its sub-groups.
+func flatten(doc *yamlcfg.Doc) []flatGroup {
+	var out []flatGroup
+	for _, g := range doc.Groups {
+		i := len(out)
+		out = append(out, flatGroup{y: g, parent: -1})
+		for _, ch := range g.Groups {
+			out = append(out, flatGroup{y: ch, parent: i})
+		}
+	}
+	return out
 }
 
 // planYAML checks the document and decides what would change. The returned
@@ -71,6 +120,10 @@ func (s *Server) planYAML(ctx context.Context, lang string, doc *yamlcfg.Doc) (*
 	if err != nil {
 		return nil, "", err
 	}
+	users, err := s.st.ListUsers(ctx)
+	if err != nil {
+		return nil, "", err
+	}
 	gByID := map[int64]store.Group{}
 	for _, g := range groups {
 		gByID[g.ID] = g
@@ -80,13 +133,14 @@ func (s *Server) planYAML(ctx context.Context, lang string, doc *yamlcfg.Doc) (*
 		sByID[sv.ID] = sv
 	}
 	p := &yamlPlan{}
+	flat := flatten(doc)
 
 	// Groups: by id, then by name.
 	usedG := map[int64]bool{}
 	seen := map[string]bool{}
-	match := make([]store.Group, len(doc.Groups))
-	for i, yg := range doc.Groups {
-		name, ok := store.CleanText(yg.Name, 80)
+	match := make([]store.Group, len(flat))
+	for i, fg := range flat {
+		name, ok := store.CleanText(fg.y.Name, 80)
 		if !ok || name == "" {
 			return nil, fmt.Sprintf("%s #%d: %s", i18n.T(lang, "yaml.group"), i+1, i18n.T(lang, "err.name")), nil
 		}
@@ -94,17 +148,17 @@ func (s *Server) planYAML(ctx context.Context, lang string, doc *yamlcfg.Doc) (*
 			return nil, fmt.Sprintf("%s %q: %s", i18n.T(lang, "yaml.group"), name, i18n.T(lang, "err.yaml_dup")), nil
 		}
 		seen[strings.ToLower(name)] = true
-		doc.Groups[i].Name = name
-		if g, ok := gByID[yg.ID]; ok && yg.ID > 0 && !usedG[g.ID] {
+		flat[i].y.Name = name
+		if g, ok := gByID[fg.y.ID]; ok && fg.y.ID > 0 && !usedG[g.ID] {
 			match[i], usedG[g.ID] = g, true
 		}
 	}
-	for i, yg := range doc.Groups {
+	for i, fg := range flat {
 		if match[i].ID != 0 {
 			continue
 		}
 		for _, g := range groups {
-			if !usedG[g.ID] && strings.EqualFold(g.Name, yg.Name) {
+			if !usedG[g.ID] && strings.EqualFold(g.Name, fg.y.Name) {
 				match[i], usedG[g.ID] = g, true
 				break
 			}
@@ -116,14 +170,35 @@ func (s *Server) planYAML(ctx context.Context, lang string, doc *yamlcfg.Doc) (*
 		}
 	}
 
+	// Who may see restricted groups (administrators always do, so they are skipped).
+	byEmail := map[string]store.User{}
+	for _, u := range users {
+		byEmail[strings.ToLower(u.Email)] = u
+	}
+	access := make([][]int64, len(flat))
+	for i, fg := range flat {
+		if !fg.y.Restricted {
+			continue
+		}
+		for _, e := range fg.y.Users {
+			u, ok := byEmail[strings.ToLower(strings.TrimSpace(e))]
+			if !ok {
+				return nil, fmt.Sprintf("%s %q: %s %q", i18n.T(lang, "yaml.group"), fg.y.Name, i18n.T(lang, "yaml.nouser"), e), nil
+			}
+			if !u.IsAdmin() {
+				access[i] = append(access[i], u.ID)
+			}
+		}
+	}
+
 	// Services: by id, then by name inside the same (existing) group.
 	type slot struct {
 		y     yamlcfg.Service
-		group int // index into doc.Groups, -1 = ungrouped
+		group int // index into flat, -1 = ungrouped
 	}
 	var slots []slot
-	for gi, yg := range doc.Groups {
-		for _, y := range yg.Services {
+	for gi, fg := range flat {
+		for _, y := range fg.y.Services {
 			slots = append(slots, slot{y, gi})
 		}
 	}
@@ -164,8 +239,8 @@ func (s *Server) planYAML(ctx context.Context, lang string, doc *yamlcfg.Doc) (*
 	built := make([]planSvc, len(slots))
 	for i, sl := range slots {
 		v := store.Service{
-			ID: matched[i].ID, GuestID: matched[i].GuestID,
-			Name: sl.y.Name, Description: sl.y.Description, Icon: sl.y.Icon,
+			ID: matched[i].ID, GuestID: matched[i].GuestID, Node: matched[i].Node,
+			Name: sl.y.Name, Description: sl.y.Description, Icon: sl.y.Icon, Type: strings.TrimSpace(sl.y.Type),
 			InternalURL: sl.y.InternalURL, ExternalURL: sl.y.ExternalURL,
 		}
 		if sl.group >= 0 {
@@ -179,22 +254,22 @@ func (s *Server) planYAML(ctx context.Context, lang string, doc *yamlcfg.Doc) (*
 		}
 		if m := matched[i]; m.ID == 0 {
 			p.newSvcs++
-		} else if m.Name != v.Name || m.Description != v.Description || m.Icon != v.Icon || m.InternalURL != v.InternalURL ||
+		} else if m.Name != v.Name || m.Description != v.Description || m.Icon != v.Icon || m.Type != v.Type || m.InternalURL != v.InternalURL ||
 			m.ExternalURL != v.ExternalURL || m.GroupID != v.GroupID {
 			p.updSvcs++
 		}
 		built[i] = planSvc{s: v}
 	}
 	k := 0
-	for gi, yg := range doc.Groups {
-		pg := planGroup{g: match[gi]}
+	for gi, fg := range flat {
+		pg := planGroup{g: match[gi], parent: fg.parent}
 		if pg.g.ID == 0 {
 			p.newGroups++
-		} else if pg.g.Name != yg.Name {
+		} else if pg.g.Name != fg.y.Name || pg.g.Restricted != fg.y.Restricted || !sameIDs(pg.g.UserIDs, access[gi]) {
 			p.updGroups++
 		}
-		pg.g.Name = yg.Name
-		for range yg.Services {
+		pg.g.Name, pg.g.Restricted, pg.g.UserIDs = fg.y.Name, fg.y.Restricted, access[gi]
+		for range fg.y.Services {
 			pg.svcs = append(pg.svcs, built[k])
 			k++
 		}
@@ -202,6 +277,22 @@ func (s *Server) planYAML(ctx context.Context, lang string, doc *yamlcfg.Doc) (*
 	}
 	p.ungroup = built[k:]
 	return p, "", nil
+}
+
+func sameIDs(a, b []int64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	set := map[int64]bool{}
+	for _, v := range a {
+		set[v] = true
+	}
+	for _, v := range b {
+		if !set[v] {
+			return false
+		}
+	}
+	return true
 }
 
 // applyYAML writes a validated plan: groups, then services, then removals.
@@ -219,12 +310,18 @@ func (s *Server) applyYAML(ctx context.Context, p *yamlPlan) error {
 		}
 		return s.st.SaveService(ctx, &v)
 	}
+	saved := make([]int64, len(p.groups)) // group id of each plan entry, once written
 	for i := range p.groups {
 		g := p.groups[i].g
 		g.Position = i
+		g.ParentID = 0
+		if pi := p.groups[i].parent; pi >= 0 {
+			g.ParentID = saved[pi]
+		}
 		if err := s.st.SaveGroup(ctx, &g); err != nil {
 			return err
 		}
+		saved[i] = g.ID
 		for _, ps := range p.groups[i].svcs {
 			if err := save(ps, g.ID); err != nil {
 				return err

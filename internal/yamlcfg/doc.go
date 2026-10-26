@@ -13,15 +13,19 @@ type Service struct {
 	Name        string
 	Description string
 	Icon        string
+	Type        string // category id, "" = automatic
 	InternalURL string
 	ExternalURL string
 }
 
 // Group holds services in display order. ID is 0 for a new group.
 type Group struct {
-	ID       int64
-	Name     string
-	Services []Service
+	ID         int64
+	Name       string
+	Restricted bool     // only administrators and Users may see it
+	Users      []string // e-mails of the people who may see a restricted group
+	Services   []Service
+	Groups     []Group // sub-groups (one level only)
 }
 
 // Doc is the whole file: groups in order, then services without a group.
@@ -50,12 +54,7 @@ func Marshal(d *Doc) string {
 	}
 	b.WriteString("\n")
 	for _, g := range d.Groups {
-		if g.ID > 0 {
-			fmt.Fprintf(&b, "  - id: %d\n    name: %s\n", g.ID, quote(g.Name))
-		} else {
-			fmt.Fprintf(&b, "  - name: %s\n", quote(g.Name))
-		}
-		writeServices(&b, g.Services, "    ")
+		writeGroup(&b, g, "  ")
 	}
 	b.WriteString("\nungrouped:")
 	if len(d.Ungrouped) == 0 {
@@ -66,6 +65,31 @@ func Marshal(d *Doc) string {
 		writeService(&b, s, "  ")
 	}
 	return b.String()
+}
+
+func writeGroup(b *strings.Builder, g Group, ind string) {
+	first, pad := ind+"- ", ind+"  "
+	if g.ID > 0 {
+		fmt.Fprintf(b, "%sid: %d\n", first, g.ID)
+		first = pad
+	}
+	fmt.Fprintf(b, "%sname: %s\n", first, quote(g.Name))
+	if g.Restricted {
+		fmt.Fprintf(b, "%srestricted: true\n", pad)
+		if len(g.Users) > 0 {
+			fmt.Fprintf(b, "%susers:\n", pad)
+			for _, u := range g.Users {
+				fmt.Fprintf(b, "%s  - %s\n", pad, quote(u))
+			}
+		}
+	}
+	writeServices(b, g.Services, pad)
+	if len(g.Groups) > 0 {
+		fmt.Fprintf(b, "%sgroups:\n", pad)
+		for _, c := range g.Groups {
+			writeGroup(b, c, pad+"  ")
+		}
+	}
 }
 
 func writeServices(b *strings.Builder, ss []Service, ind string) {
@@ -92,6 +116,9 @@ func writeService(b *strings.Builder, s Service, ind string) {
 	}
 	if s.Icon != "" {
 		fmt.Fprintf(b, "%sicon: %s\n", pad, quote(s.Icon))
+	}
+	if s.Type != "" {
+		fmt.Fprintf(b, "%stype: %s\n", pad, quote(s.Type))
 	}
 	if s.InternalURL != "" {
 		fmt.Fprintf(b, "%sinternal_url: %s\n", pad, quote(s.InternalURL))
@@ -125,31 +152,9 @@ func Unmarshal(src string) (*Doc, error) {
 		return nil, err
 	}
 	for _, it := range gl {
-		gm, ok := it.(map[string]any)
-		if !ok {
-			return nil, errAt(0, "each group must have a name")
-		}
-		if err := onlyKeys(gm, "group", "id", "name", "services"); err != nil {
-			return nil, err
-		}
-		g := Group{}
-		if g.ID, err = idOf(gm["id"], "group"); err != nil {
-			return nil, err
-		}
-		if g.Name, err = str(gm["name"], "group name"); err != nil {
-			return nil, err
-		}
-		sl, err := list(gm["services"], "services")
+		g, err := group(it, true, &total)
 		if err != nil {
 			return nil, err
-		}
-		for _, si := range sl {
-			s, err := service(si)
-			if err != nil {
-				return nil, err
-			}
-			g.Services = append(g.Services, s)
-			total++
 		}
 		d.Groups = append(d.Groups, g)
 	}
@@ -171,6 +176,70 @@ func Unmarshal(src string) (*Doc, error) {
 	return d, nil
 }
 
+func group(it any, top bool, total *int) (Group, error) {
+	gm, ok := it.(map[string]any)
+	if !ok {
+		return Group{}, errAt(0, "each group must have a name")
+	}
+	keys := []string{"id", "name", "restricted", "users", "services"}
+	if top {
+		keys = append(keys, "groups")
+	}
+	if err := onlyKeys(gm, "group", keys...); err != nil {
+		return Group{}, err
+	}
+	var g Group
+	var err error
+	if g.ID, err = idOf(gm["id"], "group"); err != nil {
+		return g, err
+	}
+	if g.Name, err = str(gm["name"], "group name"); err != nil {
+		return g, err
+	}
+	switch r, _ := str(gm["restricted"], "restricted"); strings.ToLower(r) {
+	case "", "false":
+	case "true":
+		g.Restricted = true
+	default:
+		return g, errAt(0, "\"restricted\" must be true or false, got %q", r)
+	}
+	ul, err := list(gm["users"], "users")
+	if err != nil {
+		return g, err
+	}
+	for _, u := range ul {
+		s, err := str(u, "user")
+		if err != nil || s == "" {
+			return g, errAt(0, "\"users\" must be a list of e-mail addresses")
+		}
+		g.Users = append(g.Users, s)
+	}
+	sl, err := list(gm["services"], "services")
+	if err != nil {
+		return g, err
+	}
+	for _, si := range sl {
+		s, err := service(si)
+		if err != nil {
+			return g, err
+		}
+		g.Services = append(g.Services, s)
+		*total++
+	}
+	cl, err := list(gm["groups"], "groups")
+	if err != nil {
+		return g, err
+	}
+	for _, ci := range cl {
+		child, err := group(ci, false, total)
+		if err != nil {
+			return g, err
+		}
+		g.Groups = append(g.Groups, child)
+	}
+	return g, nil
+}
+
 func list(v any, what string) ([]any, error) {
 	switch t := v.(type) {
 	case nil:
@@ -186,7 +255,7 @@ func service(v any) (Service, error) {
 	if !ok {
 		return Service{}, errAt(0, "each service needs \"name\" and a URL")
 	}
-	if err := onlyKeys(m, "service", "id", "name", "description", "icon", "internal_url", "external_url"); err != nil {
+	if err := onlyKeys(m, "service", "id", "name", "description", "icon", "type", "internal_url", "external_url"); err != nil {
 		return Service{}, err
 	}
 	var s Service
@@ -197,7 +266,7 @@ func service(v any) (Service, error) {
 	for _, f := range []struct {
 		dst *string
 		key string
-	}{{&s.Name, "name"}, {&s.Description, "description"}, {&s.Icon, "icon"}, {&s.InternalURL, "internal_url"}, {&s.ExternalURL, "external_url"}} {
+	}{{&s.Name, "name"}, {&s.Description, "description"}, {&s.Icon, "icon"}, {&s.Type, "type"}, {&s.InternalURL, "internal_url"}, {&s.ExternalURL, "external_url"}} {
 		if *f.dst, err = str(m[f.key], f.key); err != nil {
 			return s, err
 		}
