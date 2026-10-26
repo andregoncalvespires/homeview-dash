@@ -5,7 +5,9 @@ package web
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"html/template"
@@ -44,6 +46,7 @@ type Server struct {
 	disc   *discovery.Service // optional; see SetDiscovery
 	log    *slog.Logger
 	pages  map[string]*template.Template
+	assetV string // content hash of app.css/app.js, so a new release is never served from a stale cache
 	static http.Handler
 	// run executes background work (sending e-mail). Tests replace it with a
 	// synchronous version.
@@ -86,6 +89,7 @@ func New(cfg config.Config, st store.Store, a *auth.Service, log *slog.Logger) (
 		}
 		s.pages[name] = t
 	}
+	s.assetV = assetVersion()
 	sub, err := fs.Sub(assets, "static")
 	if err != nil {
 		return nil, err
@@ -282,6 +286,7 @@ type page struct {
 	Theme    string // auto, light or dark
 	HasBg    bool
 	ThemeV   string // cache-busting version of /me/theme.css
+	AssetV   string // cache-busting version of app.css/app.js
 }
 
 func (s *Server) lang(r *http.Request) string {
@@ -294,6 +299,7 @@ func (s *Server) lang(r *http.Request) string {
 func (s *Server) render(w http.ResponseWriter, r *http.Request, sess *session, name string, status int, p *page) {
 	p.Lang = s.lang(r)
 	p.Path = r.URL.Path
+	p.AssetV = s.assetV
 	if p.TitleKey != "" {
 		p.Title = i18n.T(p.Lang, p.TitleKey)
 	}
@@ -369,4 +375,14 @@ func (s *Server) background(f func(ctx context.Context)) {
 		defer cancel()
 		f(ctx)
 	})
+}
+
+// assetVersion hashes the stylesheet and script that ship in the binary.
+func assetVersion() string {
+	h := sha256.New()
+	for _, n := range []string{"static/app.css", "static/app.js"} {
+		b, _ := assets.ReadFile(n)
+		h.Write(b)
+	}
+	return hex.EncodeToString(h.Sum(nil))[:10]
 }
