@@ -113,6 +113,10 @@ var catalog = map[string]map[string]string{
 		"verify.submit": "Entrar",
 		"verify.back":   "Usar outro e-mail",
 
+		"dash.collapse":       "Recolher grupo",
+		"dash.expand":         "Expandir grupo",
+		"dash.collapse_all":   "Recolher tudo",
+		"dash.expand_all":     "Expandir tudo",
 		"dash.search":         "Buscar serviços…  (tecle / para focar)",
 		"dash.internal":       "Interno",
 		"dash.external":       "Externo",
@@ -350,6 +354,10 @@ var catalog = map[string]map[string]string{
 		"verify.submit": "Sign in",
 		"verify.back":   "Use another e-mail",
 
+		"dash.collapse":       "Collapse group",
+		"dash.expand":         "Expand group",
+		"dash.collapse_all":   "Collapse all",
+		"dash.expand_all":     "Expand all",
 		"dash.search":         "Search services…  (press / to focus)",
 		"dash.internal":       "Internal",
 		"dash.external":       "External",

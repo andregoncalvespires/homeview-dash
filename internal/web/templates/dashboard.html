@@ -1,6 +1,7 @@
 {{define "content"}}
 {{if .Data.HasServices}}
 <div class="toolbar">
+  <button id="toggle-all" class="btn" type="button" data-collapse="{{t .Lang "dash.collapse_all"}}" data-expand="{{t .Lang "dash.expand_all"}}">{{t .Lang "dash.collapse_all"}}</button>
   <input id="q" type="search" placeholder="{{t .Lang "dash.search"}}" aria-label="{{t .Lang "dash.search"}}" autocomplete="off">
   {{if .User.IsAdmin}}<button id="reorder" class="btn" type="button" hidden aria-pressed="false" data-save="/admin/layout" data-csrf="{{.CSRF}}"
     data-label-done="{{t .Lang "dash.reorder.done"}}" data-label-start="{{t .Lang "dash.reorder"}}" data-saved="{{t .Lang "dash.reorder.saved"}}" data-failed="{{t .Lang "dash.reorder.failed"}}">{{t .Lang "dash.reorder"}}</button>
@@ -10,7 +11,7 @@
 <div class="cols" id="cols">
 {{range .Data.Groups}}
 <section class="group{{if .Empty}} group-empty{{end}}" data-gid="{{.ID}}">
-  <h2>{{if $.User.IsAdmin}}{{if .ID}}<button class="ghandle" type="button" draggable="true" aria-label="{{t $.Lang "dash.reorder.group"}} {{.Name}}" title="{{t $.Lang "dash.reorder.group"}}">⠿</button>{{end}}{{end}}{{.Name}}</h2>
+  <h2>{{if $.User.IsAdmin}}{{if .ID}}<button class="ghandle" type="button" draggable="true" aria-label="{{t $.Lang "dash.reorder.group"}} {{.Name}}" title="{{t $.Lang "dash.reorder.group"}}">⠿</button>{{end}}{{end}}<button class="gtoggle" type="button" aria-expanded="true" data-collapse-label="{{t $.Lang "dash.expand"}}" data-expand-label="{{t $.Lang "dash.collapse"}}" title="{{t $.Lang "dash.collapse"}}">{{.Name}}</button></h2>
   <div class="grid">
     {{range .Services}}
     <article class="card" data-q="{{.Search}}" data-sid="{{.ID}}">
