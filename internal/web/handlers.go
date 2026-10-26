@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/mail"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -144,81 +145,164 @@ type serviceView struct {
 }
 
 type groupView struct {
-	ID       int64 // 0 for the "other" section
+	ID       int64  // group id (0 for the "other" section); only meaningful in the groups view
+	Key      string // stable key of the section, used to remember collapsed sections
 	Name     string
-	Empty    bool // no services: shown to admins only, as a place to drop cards
+	Sub      string // small detail next to the name (a machine's address, say)
+	Status   string // running/stopped for a machine section
+	Empty    bool   // no services: shown to admins only, as a place to drop cards
 	Services []serviceView
 }
 
 type dashboardData struct {
 	Groups      []groupView
 	HasServices bool
+	Mode        string // viewGroups, viewInfra or viewType
 }
 
 func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session) {
-	groups, err := s.st.ListGroups(r.Context())
-	if err != nil {
-		s.serverError(w, r, sess, err)
-		return
-	}
-	services, err := s.st.ListServices(r.Context())
-	if err != nil {
-		s.serverError(w, r, sess, err)
-		return
-	}
-	guests, err := s.st.ListGuests(r.Context())
-	if err != nil {
-		s.serverError(w, r, sess, err)
-		return
-	}
-	guestStatus := map[int64]string{} // guest id -> last known status
-	for _, g := range guests {
-		if !g.Missing && (g.Status == "running" || g.Status == "stopped") {
-			guestStatus[g.ID] = g.Status
+	if v := r.URL.Query().Get("view"); v != "" {
+		if validView(v) {
+			http.SetCookie(w, &http.Cookie{
+				Name: viewCookie, Value: v, Path: "/", MaxAge: 365 * 24 * 3600,
+				HttpOnly: true, Secure: s.cfg.CookieSecure, SameSite: http.SameSiteLaxMode,
+			})
 		}
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	mode := viewGroups
+	if c, err := r.Cookie(viewCookie); err == nil && validView(c.Value) {
+		mode = c.Value
+	}
+	ctx := r.Context()
+	groups, err := s.st.ListGroups(ctx)
+	if err != nil {
+		s.serverError(w, r, sess, err)
+		return
+	}
+	services, err := s.st.ListServices(ctx)
+	if err != nil {
+		s.serverError(w, r, sess, err)
+		return
+	}
+	guests, err := s.st.ListGuests(ctx)
+	if err != nil {
+		s.serverError(w, r, sess, err)
+		return
+	}
+	guestByID := map[int64]store.Guest{}
+	for _, g := range guests {
+		guestByID[g.ID] = g
 	}
 	lang := s.lang(r)
 
-	byGroup := map[int64]*groupView{}
-	var ordered []*groupView
-	for _, g := range groups {
-		gv := &groupView{ID: g.ID, Name: g.Name}
-		byGroup[g.ID] = gv
-		ordered = append(ordered, gv)
+	// A card for every service that has somewhere to go.
+	type item struct {
+		sv   store.Service
+		view serviceView
 	}
-	other := &groupView{Name: i18n.T(lang, "dash.ungrouped")}
-
+	var items []item
 	for _, sv := range services {
 		l := ChooseLinks(sv)
 		if l.Primary == "" {
 			continue
 		}
-		view := serviceView{
-			ID: sv.ID, Name: sv.Name, Description: sv.Description,
-			Primary: l.Primary, Secondary: l.Secondary,
-			Status: guestStatus[sv.GuestID],
+		v := serviceView{ID: sv.ID, Name: sv.Name, Description: sv.Description, Primary: l.Primary, Secondary: l.Secondary}
+		if g, ok := guestByID[sv.GuestID]; ok && !g.Missing && (g.Status == "running" || g.Status == "stopped") {
+			v.Status = g.Status
 		}
-		view.IconURL, view.IconText = resolveIcon(sv.Icon)
-		target := other
-		if g, ok := byGroup[sv.GroupID]; ok {
-			target = g
+		v.IconURL, v.IconText = resolveIcon(sv.Icon)
+		items = append(items, item{sv, v})
+	}
+	finish := func(sections []*groupView) dashboardData {
+		d := dashboardData{Mode: mode}
+		for _, g := range sections {
+			switch {
+			case len(g.Services) > 0:
+				d.Groups = append(d.Groups, *g)
+				d.HasServices = true
+			case mode == viewGroups && sess.User.IsAdmin() && g.ID != 0: // empty groups are drop targets while rearranging
+				g.Empty = true
+				d.Groups = append(d.Groups, *g)
+			}
 		}
-		view.Search = strings.ToLower(sv.Name + " " + sv.Description + " " + target.Name)
-		target.Services = append(target.Services, view)
+		return d
+	}
+	add := func(g *groupView, it item) {
+		it.view.Search = strings.ToLower(it.sv.Name + " " + it.sv.Description + " " + g.Name + " " + g.Sub)
+		g.Services = append(g.Services, it.view)
 	}
 
-	data := dashboardData{}
-	for _, g := range append(ordered, other) {
-		switch {
-		case len(g.Services) > 0:
-			data.Groups = append(data.Groups, *g)
-			data.HasServices = true
-		case sess.User.IsAdmin() && g.ID != 0: // empty groups are drop targets while rearranging
-			g.Empty = true
-			data.Groups = append(data.Groups, *g)
+	var sections []*groupView
+	switch mode {
+	case viewInfra:
+		// Machines ordered by Proxmox node, then kind and id; whatever is not tied to a machine goes last.
+		sort.SliceStable(guests, func(i, j int) bool {
+			a, b := guests[i], guests[j]
+			if a.Node != b.Node {
+				return a.Node < b.Node
+			}
+			return a.VMID < b.VMID
+		})
+		byGuest := map[int64]*groupView{}
+		for _, g := range guests {
+			kind := "LXC"
+			if g.Kind == "qemu" {
+				kind = "VM"
+			}
+			sub := strings.TrimSpace(g.Node + " · " + kind + " " + strconv.Itoa(g.VMID))
+			if g.IP != "" {
+				sub += " · " + g.IP
+			}
+			gv := &groupView{Key: "i" + strconv.FormatInt(g.ID, 10), Name: g.Name, Sub: sub}
+			if !g.Missing && (g.Status == "running" || g.Status == "stopped") {
+				gv.Status = g.Status
+			}
+			byGuest[g.ID] = gv
+			sections = append(sections, gv)
 		}
+		loose := &groupView{Key: "i0", Name: i18n.T(lang, "dash.nomachine")}
+		for _, it := range items {
+			if gv, ok := byGuest[it.sv.GuestID]; ok && it.sv.GuestID != 0 {
+				add(gv, it)
+			} else {
+				add(loose, it)
+			}
+		}
+		sections = append(sections, loose)
+	case viewType:
+		by := map[string]*groupView{}
+		for _, c := range catalog.Categories {
+			gv := &groupView{Key: "t" + c, Name: i18n.T(lang, "cat."+c)}
+			by[c] = gv
+			sections = append(sections, gv)
+		}
+		for _, it := range items {
+			c := catalog.CatOther
+			if app, ok := catalog.FromIcon(it.sv.Icon); ok {
+				c = catalog.Category(app.ID)
+			}
+			add(by[c], it)
+		}
+	default:
+		byGroup := map[int64]*groupView{}
+		for _, g := range groups {
+			gv := &groupView{ID: g.ID, Key: strconv.FormatInt(g.ID, 10), Name: g.Name}
+			byGroup[g.ID] = gv
+			sections = append(sections, gv)
+		}
+		other := &groupView{Key: "0", Name: i18n.T(lang, "dash.ungrouped")}
+		for _, it := range items {
+			if g, ok := byGroup[it.sv.GroupID]; ok {
+				add(g, it)
+			} else {
+				add(other, it)
+			}
+		}
+		sections = append(sections, other)
 	}
-	s.render(w, r, sess, "dashboard", http.StatusOK, &page{Data: data})
+	s.render(w, r, sess, "dashboard", http.StatusOK, &page{Data: finish(sections), Views: s.viewMenu(lang, mode)})
 }
 
 // ---- devices ----

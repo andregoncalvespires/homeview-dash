@@ -120,3 +120,24 @@ func TestSortedByName(t *testing.T) {
 		}
 	}
 }
+
+func TestEveryAppHasACategory(t *testing.T) {
+	valid := map[string]bool{}
+	for _, c := range Categories {
+		valid[c] = true
+	}
+	for _, a := range All() {
+		c, ok := categoryOf[a.ID]
+		if !ok || !valid[c] || c == CatOther {
+			t.Errorf("%s has no usable category (%q)", a.ID, c)
+		}
+	}
+	for id := range categoryOf {
+		if _, ok := Get(id); !ok {
+			t.Errorf("category for unknown app %q", id)
+		}
+	}
+	if Category("nope") != CatOther {
+		t.Error("unknown app should be other")
+	}
+}

@@ -127,6 +127,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/layout", s.require(true, s.postLayout))
 	mux.HandleFunc("POST /settings/background/preset", s.require(false, s.postBgPreset))
 	mux.HandleFunc("POST /settings/background/delete", s.require(false, s.deleteBackground))
+	mux.HandleFunc("GET /theme.css", s.getDefaultThemeCSS)
 	mux.HandleFunc("GET /me/theme.css", s.require(false, s.getThemeCSS))
 	mux.HandleFunc("GET /me/background", s.require(false, s.getBackground))
 	mux.HandleFunc("GET /devices", s.require(false, s.getDevices))
@@ -285,8 +286,9 @@ type page struct {
 	Data     any
 	Theme    string // auto, light or dark
 	HasBg    bool
-	ThemeV   string // cache-busting version of /me/theme.css
-	AssetV   string // cache-busting version of app.css/app.js
+	ThemeV   string    // cache-busting version of /me/theme.css
+	AssetV   string    // cache-busting version of app.css/app.js
+	Views    *viewMenu // dashboard view picker, shown next to the gear
 }
 
 func (s *Server) lang(r *http.Request) string {
@@ -303,7 +305,8 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, sess *session, n
 	if p.TitleKey != "" {
 		p.Title = i18n.T(p.Lang, p.TitleKey)
 	}
-	p.Theme = store.ThemeAuto
+	d := store.DefaultPrefs(0) // before sign-in: the look a new user gets
+	p.Theme, p.HasBg = d.Theme, d.ShowsBackground()
 	if sess != nil {
 		p.User = sess.User
 		p.CSRF = s.auth.CSRF(sess.Device)

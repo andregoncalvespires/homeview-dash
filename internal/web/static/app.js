@@ -250,10 +250,17 @@
   }
   // Header menu: a <details> that also closes on Escape and when clicking elsewhere.
   var menu = document.getElementById('menu');
-  if (menu) {
-    document.addEventListener('click', function (e) { if (menu.open && !menu.contains(e.target)) menu.open = false; });
+  var menus = Array.prototype.slice.call(document.querySelectorAll('details.menu'));
+  if (menus.length) {
+    document.addEventListener('click', function (e) {
+      menus.forEach(function (m) { if (m.open && !m.contains(e.target)) m.open = false; });
+    });
+    menus.forEach(function (m) { // opening one closes the other
+      m.addEventListener('toggle', function () { if (m.open) menus.forEach(function (o) { if (o !== m) o.open = false; }); });
+    });
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && menu.open) { menu.open = false; var s = menu.querySelector('summary'); if (s) s.focus(); }
+      if (e.key !== 'Escape') return;
+      menus.forEach(function (m) { if (m.open) { m.open = false; var s = m.querySelector('summary'); if (s) s.focus(); } });
     });
   }
   // Confirmation before destructive actions (CSP forbids inline handlers).

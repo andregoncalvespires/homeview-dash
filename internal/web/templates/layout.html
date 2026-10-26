@@ -7,11 +7,24 @@
 <title>{{if .Title}}{{.Title}} · {{end}}HomeView</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="stylesheet" href="/static/app.css?v={{.AssetV}}">
-{{if .User}}<link rel="stylesheet" href="/me/theme.css?v={{.ThemeV}}">{{end}}
+{{if .User}}<link rel="stylesheet" href="/me/theme.css?v={{.ThemeV}}">{{else}}<link rel="stylesheet" href="/theme.css?v={{.AssetV}}">{{end}}
 </head>
 <body{{if .HasBg}} class="has-bg"{{end}}>
 <header class="top">
   <a class="brand" href="/"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><use href="/static/favicon.svg#icon"/></svg>HomeView</a>
+  <div class="topright">
+  {{if .Views}}
+  <details class="menu viewmenu" id="viewmenu">
+    <summary class="gear" aria-label="{{t .Lang "view.title"}}" title="{{t .Lang "view.title"}}">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="m3 13 9 5 9-5"/></svg>
+    </summary>
+    <nav class="menu-panel" aria-label="{{t .Lang "view.title"}}">
+      <p class="menu-user">{{t .Lang "view.title"}}</p>
+      {{range .Views.Options}}<a href="/?view={{.ID}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}}</a>
+      {{end}}
+    </nav>
+  </details>
+  {{end}}
   {{if .User}}
   <details class="menu" id="menu">
     <summary class="gear" aria-label="{{t .Lang "nav.menu"}}" title="{{t .Lang "nav.menu"}}">
@@ -38,6 +51,7 @@
     </nav>
   </details>
   {{end}}
+  </div>
 </header>
 <main>
   {{if .Flash}}<div class="flash{{if .FlashErr}} err{{end}}" role="status">{{t .Lang .Flash}}</div>{{end}}

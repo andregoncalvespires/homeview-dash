@@ -22,6 +22,7 @@ HomeView is a simple alternative to dashboards such as Heimdall and Homarr, buil
 - **Administrator created from the console**, nothing written to `docker-compose.yml`.
 - **Users, groups and services** (name, description, icon, internal URL, external URL), with a **35-application catalog** (icon and suggested port) or a **custom icon** uploaded from your computer.
 - **Proxmox discovery**: reads the VMs and LXCs of your server or cluster; you approve what goes on the dashboard, with **several services per VM/LXC** and the option to point at the **Proxmox host's own IP**. A green/grey dot shows whether they are running.
+- **Three dashboard views** (layers icon next to the gear): **Groups** (your own), **Infrastructure** (by Proxmox VM/LXC, with status and IP) and **Type** (Automation, Network, Media…). The choice is remembered in the browser.
 - **Organisable dashboard**: rearrange cards and groups by dragging (two columns of groups), **collapse/expand groups** (remembered in the browser) and instant search.
 - **YAML editor** for groups and services, with validation before applying and file download.
 - **Per-user appearance**: light/dark theme, accent colour and 11 built-in backgrounds (starry sky and dark theme are the default) or your own image.
@@ -31,7 +32,7 @@ HomeView is a simple alternative to dashboards such as Heimdall and Homarr, buil
 
 | Version | Delivery |
 |---|---|
-| v0.6 | Views by hierarchy/type and group permissions |
+| v0.6 | Subgroups, editable type per service, Proxmox node in the Infrastructure view and group permissions |
 
 ## Install (3 steps)
 
@@ -140,6 +141,12 @@ Good to know:
 - **Guest IP** (best effort): a running LXC reports its IP through the API; for a VM it needs the *QEMU Guest Agent* installed and enabled. Without an IP, type the URL yourself.
 - **Syncing**: automatic every `HOMEVIEW_DISCOVERY_INTERVAL` and manual with the button. Items that vanish from Proxmox are flagged and you decide whether to forget them; an item comes back by itself if it reappears. Deleting a service returns its item to the "New" list. "Ignored" items can be restored.
 - **Status**: services that came from Proxmox show a dot on the card (green = running, hollow = stopped), based on the last sync.
+
+### Dashboard views
+
+The layers icon next to the gear switches how the dashboard is shown: **Groups** (your own organisation, the only one you can rearrange by dragging), **Infrastructure** (one section per discovered VM/LXC, ordered by node and ID, with a status dot and IP; services without a machine go under *No machine*) and **Type** (the catalog application's category; anything not from the catalog goes to *Other*). Every section can also be collapsed.
+
+The sign-in page uses the same default look as the dashboard (dark theme and starry sky).
 
 ### Building the dashboard (admin)
 

@@ -22,6 +22,7 @@ O HomeView é uma alternativa simples a painéis como Heimdall e Homarr, pensada
 - **Administrador criado pelo console**, sem gravar nada no `docker-compose.yml`.
 - **Usuários, grupos e serviços** (nome, descrição, ícone, URL interna, URL externa), com **catálogo de 35 aplicações** (ícone e porta sugerida) ou **ícone próprio** enviado do computador.
 - **Descoberta pelo Proxmox**: lê as VMs e LXCs do seu servidor ou cluster; você aprova o que vai para o painel, **com vários serviços por VM/LXC** e a possibilidade de apontar para o **IP do próprio host Proxmox**. O ponto verde/cinza mostra se estão rodando.
+- **Três visões do painel** (ícone de camadas ao lado da engrenagem): **Grupos** (os seus), **Infraestrutura** (por VM/LXC do Proxmox, com status e IP) e **Tipo** (Automação, Rede, Mídia…). A escolha fica salva no navegador.
 - **Painel organizável**: reorganizar arrastando cards e grupos (duas colunas de grupos), **recolher/expandir grupos** (lembrado no navegador) e busca instantânea.
 - **Editor YAML** de grupos e serviços, com validação antes de aplicar e download do arquivo.
 - **Aparência por usuário**: tema claro/escuro, cor de destaque e 11 fundos prontos (céu estrelado e tema escuro são o padrão) ou imagem própria.
@@ -31,7 +32,7 @@ O HomeView é uma alternativa simples a painéis como Heimdall e Homarr, pensada
 
 | Versão | Entrega |
 |---|---|
-| v0.6 | Visões por hierarquia/tipo e permissões por grupo |
+| v0.6 | Subgrupos, tipo editável por serviço, nó Proxmox na visão Infraestrutura e permissões por grupo |
 
 ## Instalação (3 passos)
 
@@ -140,6 +141,12 @@ Pontos importantes:
 - **IP do convidado** (best effort): LXC em execução informa o IP pela API; em VM, só com o *QEMU Guest Agent* instalado e habilitado. Sem IP, digite a URL.
 - **Sincronização**: automática a cada `HOMEVIEW_DISCOVERY_INTERVAL` e manual pelo botão. O que sumir do Proxmox fica marcado e você decide se esquece; um item volta sozinho se reaparecer. Excluir um serviço devolve o item à lista de "Novos". Itens "Ignorados" podem ser restaurados.
 - **Status**: serviços vindos do Proxmox mostram um ponto no cartão (verde = em execução, vazio = parado), conforme a última sincronização.
+
+### Visões do painel
+
+O ícone de camadas, ao lado da engrenagem, troca a forma de ver o painel: **Grupos** (a sua organização, a única em que dá para reorganizar arrastando), **Infraestrutura** (uma seção por VM/LXC descoberta, ordenadas por nó e ID, com ponto de status e IP; serviços sem máquina ficam em *Sem máquina*) e **Tipo** (categoria da aplicação do catálogo; o que não é do catálogo vai para *Outros*). Cada seção também pode ser recolhida.
+
+A tela de login usa o mesmo visual padrão do painel (tema escuro e céu estrelado).
 
 ### Montando o painel (admin)
 

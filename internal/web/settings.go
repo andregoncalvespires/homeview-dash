@@ -243,6 +243,21 @@ func (s *Server) getThemeCSS(w http.ResponseWriter, r *http.Request, sess *sessi
 		s.serverError(w, r, sess, err)
 		return
 	}
+	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	_, _ = io.WriteString(w, themeCSS(p))
+}
+
+// getDefaultThemeCSS styles the pages shown before sign-in (login, errors) the
+// way a new user sees the dashboard: dark theme and the default wallpaper.
+func (s *Server) getDefaultThemeCSS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	_, _ = io.WriteString(w, themeCSS(store.DefaultPrefs(0)))
+}
+
+// themeCSS is the generated stylesheet for one set of preferences.
+func themeCSS(p store.Prefs) string {
 	var b strings.Builder
 	b.WriteString("/* generated per user */\n")
 	if p.Accent != "" {
@@ -257,9 +272,7 @@ func (s *Server) getThemeCSS(w http.ResponseWriter, r *http.Request, sess *sessi
 		b.WriteString(".has-bg .top,.has-bg footer{background:color-mix(in srgb,var(--panel) 70%,transparent);" +
 			"-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);}\n")
 	}
-	w.Header().Set("Content-Type", "text/css; charset=utf-8")
-	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
-	_, _ = io.WriteString(w, b.String())
+	return b.String()
 }
 
 func (s *Server) getBackground(w http.ResponseWriter, r *http.Request, sess *session) {

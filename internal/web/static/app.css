@@ -219,3 +219,7 @@ textarea.yaml { width: 100%; box-sizing: border-box; font: .88rem/1.45 ui-monosp
 .group.collapsed .gtoggle::before { transform: rotate(-45deg); }
 .group.collapsed .grid { display: none; }
 body.searching .group.collapsed .grid, body.reorder .group.collapsed .grid { display: grid; }
+
+.topright { display: flex; align-items: center; gap: .35rem; }
+.group h2 .dot { display: inline-block; vertical-align: middle; margin-left: .5rem; }
+.gsub { margin-left: .6rem; font-weight: 400; text-transform: none; letter-spacing: 0; font-size: .78rem; color: var(--muted); }
