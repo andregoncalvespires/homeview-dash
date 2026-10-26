@@ -1,14 +1,19 @@
 {{define "content"}}
-{{if .Data.Groups}}
+{{if .Data.HasServices}}
 <div class="toolbar">
   <input id="q" type="search" placeholder="{{t .Lang "dash.search"}}" aria-label="{{t .Lang "dash.search"}}" autocomplete="off">
+  {{if .User.IsAdmin}}<button id="reorder" class="btn" type="button" aria-pressed="false" data-save="/admin/layout" data-csrf="{{.CSRF}}"
+    data-label-done="{{t .Lang "dash.reorder.done"}}" data-label-start="{{t .Lang "dash.reorder"}}" data-saved="{{t .Lang "dash.reorder.saved"}}" data-failed="{{t .Lang "dash.reorder.failed"}}">{{t .Lang "dash.reorder"}}</button>
+  <span id="reorder-status" class="muted" role="status" aria-live="polite"></span>{{end}}
 </div>
+{{if .User.IsAdmin}}<p id="reorder-help" class="muted" hidden>{{t .Lang "dash.reorder.help"}}</p>{{end}}
+<div class="cols" id="cols">
 {{range .Data.Groups}}
-<section class="group">
-  <h2>{{.Name}}</h2>
+<section class="group{{if .Empty}} group-empty{{end}}" data-gid="{{.ID}}">
+  <h2>{{if $.User.IsAdmin}}{{if .ID}}<button class="ghandle" type="button" draggable="true" aria-label="{{t $.Lang "dash.reorder.group"}} {{.Name}}" title="{{t $.Lang "dash.reorder.group"}}">⠿</button>{{end}}{{end}}{{.Name}}</h2>
   <div class="grid">
     {{range .Services}}
-    <article class="card" data-q="{{.Search}}">
+    <article class="card" data-q="{{.Search}}" data-sid="{{.ID}}">
       <a class="card-main" href="{{.Primary}}" target="_blank" rel="noopener noreferrer">
         <span class="icon">{{if .IconURL}}<img src="{{.IconURL}}" alt="" loading="lazy" referrerpolicy="no-referrer">{{else if .IconText}}{{.IconText}}{{else}}🔗{{end}}</span>
         <span class="txt"><strong>{{.Name}}</strong>{{if .Description}}<small>{{.Description}}</small>{{end}}</span>
@@ -20,6 +25,7 @@
   </div>
 </section>
 {{end}}
+</div>
 <p id="noresults" class="muted" hidden>{{t .Lang "dash.noresults"}}</p>
 {{else}}
 <section class="panel narrow">

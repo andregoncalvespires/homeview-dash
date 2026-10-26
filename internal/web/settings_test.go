@@ -74,7 +74,7 @@ func TestAppearance(t *testing.T) {
 
 	ana := e.login("ana@example.com")
 	tok := e.csrf(ana)
-	if r, b := e.get(ana, "/settings"); r.StatusCode != 200 || !strings.Contains(b, `href="/settings"`) || !strings.Contains(b, `name="accent_preset"`) || !strings.Contains(b, `data-theme="auto"`) {
+	if r, b := e.get(ana, "/settings"); r.StatusCode != 200 || !strings.Contains(b, `href="/settings"`) || !strings.Contains(b, `name="accent_preset"`) || !strings.Contains(b, `data-theme="dark"`) {
 		t.Fatalf("settings page: %d", r.StatusCode)
 	}
 
@@ -97,7 +97,7 @@ func TestAppearance(t *testing.T) {
 	}
 	r, css := e.get(ana, "/me/theme.css")
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "text/css") || !strings.Contains(css, "--accent:#7c3aed;--accent-text:#ffffff;") ||
-		!strings.Contains(css, "url(/static/backgrounds/oceano.webp)") || !strings.Contains(r.Header.Get("Cache-Control"), "private") {
+		!strings.Contains(css, "url(/static/backgrounds/estrelas.webp)") || !strings.Contains(r.Header.Get("Cache-Control"), "private") {
 		t.Errorf("theme.css (%s): %s", r.Header.Get("Cache-Control"), css)
 	}
 	// The settings page reflects the saved choice.
@@ -137,9 +137,12 @@ func TestAppearance(t *testing.T) {
 
 	// Preferences are per user.
 	admin := e.login("admin@example.com")
-	save(url.Values{"theme": {"dark"}, "accent_preset": {"red"}, "bg_dim": {"35"}})
-	if _, b := e.get(admin, "/"); !strings.Contains(b, `data-theme="auto"`) {
+	save(url.Values{"theme": {"light"}, "accent_preset": {"red"}, "bg_dim": {"35"}})
+	if _, b := e.get(admin, "/"); !strings.Contains(b, `data-theme="dark"`) { // the default for new users
 		t.Error("another user's theme leaked")
+	}
+	if _, css := e.get(admin, "/me/theme.css"); strings.Contains(css, "--accent") {
+		t.Error("another user's accent leaked")
 	}
 }
 
@@ -261,12 +264,12 @@ func TestBundledBackgrounds(t *testing.T) {
 		t.Error("default wallpaper not applied")
 	}
 	_, page := e.get(ana, "/settings")
-	for _, want := range []string{`value="oceano" aria-pressed="true"`, `value="grafite" aria-pressed="false"`, `/static/backgrounds/dunas-thumb.webp`, "Oceano"} {
+	for _, want := range []string{`value="estrelas" aria-pressed="true"`, `value="grafite" aria-pressed="false"`, `/static/backgrounds/dunas-thumb.webp`, "Céu estrelado"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("settings page lacks %q", want)
 		}
 	}
-	if r, _ := e.get(ana, "/static/backgrounds/oceano.webp"); r.StatusCode != 200 {
+	if r, _ := e.get(ana, "/static/backgrounds/estrelas.webp"); r.StatusCode != 200 {
 		t.Errorf("wallpaper not served: %d", r.StatusCode)
 	}
 

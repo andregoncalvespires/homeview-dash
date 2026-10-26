@@ -420,7 +420,7 @@ func testPrefs(t *testing.T, s store.Store) {
 	// Defaults until something is saved.
 	p, err := s.GetPrefs(ctx, u.ID)
 	must(t, err)
-	if p != store.DefaultPrefs(u.ID) || p.Theme != "auto" || p.BgDim != store.DefaultBgDim || p.HasBg {
+	if p != store.DefaultPrefs(u.ID) || p.Theme != "dark" || p.BgPreset != "estrelas" || p.BgDim != store.DefaultBgDim || p.HasBg {
 		t.Fatalf("defaults = %+v", p)
 	}
 	if _, _, err := s.GetBackground(ctx, u.ID); !errors.Is(err, store.ErrNotFound) {
@@ -481,7 +481,7 @@ func testPrefs(t *testing.T, s store.Store) {
 		t.Fatalf("default wallpaper = %+v", p)
 	}
 	must(t, s.SetBgPreset(ctx, u3.ID, "dunas")) // first write creates the row
-	if p, _ = s.GetPrefs(ctx, u3.ID); p.BgPreset != "dunas" || p.Theme != "auto" || p.BgDim != store.DefaultBgDim {
+	if p, _ = s.GetPrefs(ctx, u3.ID); p.BgPreset != "dunas" || p.Theme != "dark" || p.BgDim != store.DefaultBgDim {
 		t.Fatalf("preset = %+v", p)
 	}
 	must(t, s.SetBackground(ctx, u3.ID, "image/png", img, at))
@@ -508,7 +508,7 @@ func testPrefs(t *testing.T, s store.Store) {
 	// A background can be the very first thing a user sets.
 	u2, _ := s.CreateUser(ctx, "b@example.com", "Bob", store.RoleUser)
 	must(t, s.SetBackground(ctx, u2.ID, "image/webp", []byte("RIFFxxxxWEBP"), at))
-	if p, _ = s.GetPrefs(ctx, u2.ID); !p.HasBg || p.Theme != "auto" || p.BgDim != store.DefaultBgDim {
+	if p, _ = s.GetPrefs(ctx, u2.ID); !p.HasBg || p.Theme != "dark" || p.BgDim != store.DefaultBgDim {
 		t.Fatalf("first-write defaults = %+v", p)
 	}
 

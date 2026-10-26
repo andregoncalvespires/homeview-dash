@@ -50,7 +50,7 @@ h2 { font-size: 1.05rem; margin: 0 0 .75rem; }
 .linkbtn { background: none; border: 0; padding: 0; font: inherit; color: var(--muted); cursor: pointer; }
 .linkbtn:hover { color: var(--text); text-decoration: underline; }
 
-main { width: 100%; max-width: 1200px; margin: 0 auto; padding: 1.25rem; flex: 1; }
+main { width: 100%; max-width: 1500px; margin: 0 auto; padding: 1.25rem; flex: 1; }
 footer { text-align: center; padding: 1rem; color: var(--muted); font-size: .85rem; }
 footer a { color: var(--muted); }
 
@@ -66,9 +66,21 @@ footer a { color: var(--muted); }
 .toolbar { margin-bottom: 1.25rem; }
 #q { width: 100%; max-width: 420px; }
 
-.group { margin-bottom: 1.5rem; }
+.cols { column-count: 2; column-gap: 1.75rem; }
+.group { margin: 0 0 1.5rem; break-inside: avoid; }
+.group-empty { display: none; }
+.ghandle { display: none; }
+body.reorder .group-empty { display: block; }
+body.reorder .group-empty .grid { min-height: 3.5rem; border: 1px dashed var(--line); border-radius: 10px; }
+body.reorder .grid { min-height: 3.5rem; }
+body.reorder .ghandle { display: inline-block; cursor: grab; background: none; border: 0; color: var(--muted); font-size: 1.1rem; line-height: 1; padding: 0 .4rem 0 0; }
+body.reorder .card { cursor: grab; border-style: dashed; }
+body.reorder .card a { pointer-events: auto; cursor: grab; }
+.dragging { opacity: .35; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+.toolbar #q { flex: 1 1 18rem; }
 .group h2 { text-transform: uppercase; letter-spacing: .06em; font-size: .78rem; color: var(--muted); }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: .75rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .75rem; }
 .card {
   position: relative; display: flex; align-items: stretch; background: var(--panel);
   border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
@@ -174,6 +186,9 @@ label.sw input:focus-visible + .swatch { outline: 2px solid var(--accent); outli
 .svclist a { display: inline-block; padding: .15rem .6rem; border: 1px solid var(--line); border-radius: 999px; font-size: .85rem; text-decoration: none; color: var(--text); }
 .bgprev { display: block; max-width: 100%; max-height: 180px; border-radius: 10px; border: 1px solid var(--line); margin: 0 0 1rem; object-fit: cover; }
 
+@media (max-width: 900px) {
+  .cols { column-count: 1; }
+}
 @media (max-width: 520px) {
   main { padding: .9rem; }
   .grid { grid-template-columns: 1fr; }

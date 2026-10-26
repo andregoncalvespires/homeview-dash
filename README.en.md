@@ -22,7 +22,7 @@ HomeView is a simple alternative to dashboards such as Heimdall and Homarr, buil
 - Administrator created from the console, **nothing written to `docker-compose.yml`**.
 - Users, groups and services (name, description, icon, internal URL, external URL, position).
 - One-time sign-in link from the console, as a recovery path if e-mail is down.
-- **34-application catalog** with icon and suggested port, **open in a new tab**, and **light/dark theme, accent colour and background image per user** (v0.3).
+- **35-application catalog** with icon and suggested port, **open in a new tab**, and **light/dark theme, accent colour and background image per user** (v0.3).
 - **Proxmox discovery** (v0.2): reads the VMs and LXCs of your server or cluster, you approve what goes on the dashboard, and a green/grey dot shows whether they are running.
 
 ### What comes next
@@ -105,7 +105,8 @@ Under **Appearance**, each person chooses, for their own account and on any devi
 
 - **Theme**: automatic (follow the device), light or dark.
 - **Accent colour**: eight presets or any other colour (the text on top switches between white and dark to keep contrast).
-- **Built-in backgrounds**: 11 original images (Ocean is the default; "No background" is also an option). Regenerate with `python3 tools/backgrounds/gen.py <dir>` (needs Pillow and numpy).
+- **Rearranging (admin)**: on the dashboard, **Rearrange** lets you drag cards between groups and use the ⠿ handle to move groups; the keyboard works too (Alt + ↑/↓). The order is saved immediately. The dashboard uses two columns on wide screens and one on narrow ones.
+- **Built-in backgrounds**: 11 original images (Starry sky is the default, together with the dark theme; "No background" is also an option). Regenerate with `python3 tools/backgrounds/gen.py <dir>` (needs Pillow and numpy).
 - **Your own background image**: PNG, JPEG or WebP up to 3 MB, with a fade control to keep text readable. The image lives in the database (the `/data` volume), is only served to its owner, and SVG is not accepted.
 
 ### Proxmox discovery

@@ -132,6 +132,7 @@ func safeNext(next string) string {
 // ---- dashboard ----
 
 type serviceView struct {
+	ID                int64
 	Name, Description string
 	Primary           string
 	Secondary         string
@@ -142,11 +143,16 @@ type serviceView struct {
 }
 
 type groupView struct {
+	ID       int64 // 0 for the "other" section
 	Name     string
+	Empty    bool // no services: shown to admins only, as a place to drop cards
 	Services []serviceView
 }
 
-type dashboardData struct{ Groups []groupView }
+type dashboardData struct {
+	Groups      []groupView
+	HasServices bool
+}
 
 func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session) {
 	groups, err := s.st.ListGroups(r.Context())
@@ -175,7 +181,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 	byGroup := map[int64]*groupView{}
 	var ordered []*groupView
 	for _, g := range groups {
-		gv := &groupView{Name: g.Name}
+		gv := &groupView{ID: g.ID, Name: g.Name}
 		byGroup[g.ID] = gv
 		ordered = append(ordered, gv)
 	}
@@ -187,7 +193,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 			continue
 		}
 		view := serviceView{
-			Name: sv.Name, Description: sv.Description,
+			ID: sv.ID, Name: sv.Name, Description: sv.Description,
 			Primary: l.Primary, Secondary: l.Secondary,
 			Status: guestStatus[sv.GuestID],
 		}
@@ -209,7 +215,12 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 
 	data := dashboardData{}
 	for _, g := range append(ordered, other) {
-		if len(g.Services) > 0 {
+		switch {
+		case len(g.Services) > 0:
+			data.Groups = append(data.Groups, *g)
+			data.HasServices = true
+		case sess.User.IsAdmin() && g.ID != 0: // empty groups are drop targets while rearranging
+			g.Empty = true
 			data.Groups = append(data.Groups, *g)
 		}
 	}

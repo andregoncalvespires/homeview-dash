@@ -7,8 +7,8 @@ import (
 
 func TestCatalogIntegrity(t *testing.T) {
 	seen := map[string]bool{}
-	if len(apps) < 34 {
-		t.Errorf("catalog has %d apps, expected at least the 34 requested", len(apps))
+	if len(apps) < 35 {
+		t.Errorf("catalog has %d apps, expected at least the 35 expected", len(apps))
 	}
 	for _, a := range apps {
 		if a.ID == "" || a.Name == "" || a.File == "" || seen[a.ID] {
@@ -48,6 +48,8 @@ func TestMatch(t *testing.T) {
 		"cloudflared":                      "cloudflared",
 		"frigate-nvr":                      "frigate",
 		"docker":                           "docker",
+		"influxdb2":                        "influxdb",
+		"matter-server":                    "matter",
 		"lxc-debian12":                     "debian",
 	}
 	for in, want := range cases {
@@ -68,6 +70,10 @@ func TestSuggestedURL(t *testing.T) {
 		id, host, want string
 	}{
 		{"home-assistant", "192.168.1.10", "http://192.168.1.10:8123"},
+		{"portainer", "10.0.0.5", "https://10.0.0.5:9443"},
+		{"code-server", "10.0.0.5", "http://10.0.0.5:8443"},
+		{"matter", "10.0.0.5", "http://10.0.0.5:5580"},
+		{"influxdb", "10.0.0.5", "http://10.0.0.5:8086"},
 		{"proxmox", "pve.lan", "https://pve.lan:8006"},
 		{"pi-hole", "10.0.0.2", "http://10.0.0.2/admin"},
 		{"openwrt", "192.168.1.1", "http://192.168.1.1"},
@@ -103,5 +109,14 @@ func TestIconRefs(t *testing.T) {
 	}
 	if (App{Port: 8080, Alt: []int{80, 8081}}).PortLabel() != "8080 (alt: 80, 8081)" || (App{}).PortLabel() != "" {
 		t.Error("PortLabel")
+	}
+}
+
+func TestSortedByName(t *testing.T) {
+	all := All()
+	for i := 1; i < len(all); i++ {
+		if strings.ToLower(all[i-1].Name) > strings.ToLower(all[i].Name) {
+			t.Errorf("%q comes before %q", all[i-1].Name, all[i].Name)
+		}
 	}
 }

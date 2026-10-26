@@ -147,7 +147,7 @@ const (
 const DefaultBgDim = 35
 
 // DefaultBgPreset is the bundled wallpaper a user gets until they choose.
-const DefaultBgPreset = "oceano"
+const DefaultBgPreset = "estrelas"
 
 // Prefs are one user's appearance settings.
 type Prefs struct {
@@ -165,7 +165,7 @@ func (p Prefs) ShowsBackground() bool { return p.HasBg || p.BgPreset != "" }
 
 // DefaultPrefs are used until a user changes something.
 func DefaultPrefs(userID int64) Prefs {
-	return Prefs{UserID: userID, Theme: ThemeAuto, BgDim: DefaultBgDim, BgPreset: DefaultBgPreset}
+	return Prefs{UserID: userID, Theme: ThemeDark, BgDim: DefaultBgDim, BgPreset: DefaultBgPreset}
 }
 
 // ValidTheme reports whether t is a known theme.

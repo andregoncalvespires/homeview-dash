@@ -22,7 +22,7 @@ O HomeView é uma alternativa simples a painéis como Heimdall e Homarr, pensada
 - Administrador criado pelo console, **sem gravar nada no `docker-compose.yml`**.
 - Usuários, grupos e serviços (nome, descrição, ícone, URL interna, URL externa, posição).
 - Link de acesso único pelo console, para recuperação caso o e-mail falhe.
-- **Catálogo de 34 aplicações** com ícone e porta sugerida, **abrir em nova aba**, e **tema claro/escuro, cor de destaque e imagem de fundo por usuário** (v0.3).
+- **Catálogo de 35 aplicações** com ícone e porta sugerida, **abrir em nova aba**, e **tema claro/escuro, cor de destaque e imagem de fundo por usuário** (v0.3).
 - **Descoberta pelo Proxmox** (v0.2): lê as VMs e LXCs do seu servidor ou cluster, você aprova o que vai para o painel e o ponto verde/cinza mostra se estão rodando.
 
 ### O que vem a seguir
@@ -105,7 +105,8 @@ No menu **Aparência**, cada pessoa escolhe, só para a sua conta e valendo em q
 
 - **Tema**: automático (segue o aparelho), claro ou escuro.
 - **Cor de destaque**: oito cores prontas ou qualquer outra (o texto sobre ela ajusta para branco ou escuro, mantendo o contraste).
-- **Fundos prontos**: 11 imagens originais (Oceano é o padrão; há também a opção "Sem fundo"). Gerar de novo: `python3 tools/backgrounds/gen.py <pasta>` (precisa de Pillow e numpy).
+- **Reorganizar (admin)**: no painel, **Reorganizar** deixa arrastar os cards entre grupos e o ícone ⠿ para mover grupos; também funciona pelo teclado (Alt + ↑/↓). A ordem é salva na hora. O painel usa duas colunas em telas largas e uma em telas estreitas.
+- **Fundos prontos**: 11 imagens originais (Céu estrelado é o padrão, junto com o tema escuro; há também a opção "Sem fundo"). Gerar de novo: `python3 tools/backgrounds/gen.py <pasta>` (precisa de Pillow e numpy).
 - **Imagem de fundo própria**: PNG, JPEG ou WebP de até 3 MB, com controle de esmaecimento para manter o texto legível. A imagem fica no banco (volume `/data`), só é entregue ao dono e SVG não é aceito.
 
 ### Descoberta pelo Proxmox

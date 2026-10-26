@@ -7,7 +7,7 @@
 package backgrounds
 
 // Default is what a user sees until they pick something else.
-const Default = "oceano"
+const Default = "estrelas"
 
 // Background is one bundled wallpaper.
 type Background struct {
@@ -16,8 +16,8 @@ type Background struct {
 
 // All is the display order.
 var All = []Background{
-	{"oceano"}, {"crepusculo"}, {"montanhas"}, {"floresta"}, {"dunas"}, {"malha-pastel"},
-	{"poligonos"}, {"aurora"}, {"estrelas"}, {"topografico"}, {"grafite"},
+	{"estrelas"}, {"aurora"}, {"oceano"}, {"crepusculo"}, {"montanhas"}, {"floresta"},
+	{"dunas"}, {"malha-pastel"}, {"poligonos"}, {"topografico"}, {"grafite"},
 }
 
 // Valid reports whether id names a bundled wallpaper.

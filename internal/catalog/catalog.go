@@ -6,6 +6,7 @@ package catalog
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"unicode"
 )
@@ -78,7 +79,9 @@ func noweb(id, name, file string, port int, aliases ...string) App {
 	return App{ID: id, Name: name, File: file, Port: port, Aliases: aliases}
 }
 
-// apps is ordered: when two aliases of equal length match, the earlier app wins.
+// apps is sorted by name at start-up (see init), so the entries below can be
+// added in any order. When two aliases of equal length match, the first app in
+// that sorted order wins.
 var apps = []App{
 	web("home-assistant", "Home Assistant", "home-assistant.svg", "http", 8123, nil, "", "homeassistant", "haos", "hassio", "hass"),
 	web("zigbee2mqtt", "Zigbee2MQTT", "zigbee2mqtt.svg", "http", 8080, nil, "", "zigbee2mqtt", "z2m"),
@@ -87,14 +90,15 @@ var apps = []App{
 	noweb("mqtt", "MQTT (broker)", "mqtt.svg", 1883, "mosquitto", "mqttbroker", "mqtt"),
 	web("mqtt-explorer", "MQTT Explorer", "mqtt.svg", "http", 4000, nil, "", "mqttexplorer"),
 	web("proxmox", "Proxmox", "proxmox.svg", "https", 8006, nil, "", "proxmox", "pve"),
-	web("portainer", "Portainer", "portainer.svg", "http", 9000, []int{9443}, "", "portainer"),
+	web("portainer", "Portainer", "portainer.svg", "https", 9443, []int{9000}, "", "portainer"),
 	web("omada", "Omada Controller", "omada.svg", "https", 8043, []int{8088}, "", "omada"),
-	web("code-server", "Code Server", "code-server.png", "http", 8080, nil, "", "codeserver", "vscode"),
+	web("code-server", "Code Server", "code-server.png", "http", 8443, []int{8080}, "", "codeserver", "vscode"),
 	web("node-red", "Node-RED", "node-red.svg", "http", 1880, nil, "", "nodered"),
 	web("grafana", "Grafana", "grafana.svg", "http", 3000, nil, "", "grafana", "graffana"),
 	web("openmediavault", "OpenMediaVault", "openmediavault.svg", "http", 80, nil, "", "openmediavault", "omv"),
 	web("frigate", "Frigate", "frigate.svg", "https", 8971, []int{5000}, "", "frigate"),
-	noweb("matter", "Matter Server", "matter.svg", 5580, "matterserver", "matter"),
+	web("matter", "Matter Server", "matter.svg", "http", 5580, nil, "", "matterserver", "matter"),
+	web("influxdb", "InfluxDB", "influxdb.svg", "http", 8086, nil, "", "influxdb", "influx"),
 	web("immich", "Immich", "immich.svg", "http", 2283, nil, "", "immich"),
 	web("jellyfin", "Jellyfin", "jellyfin.svg", "http", 8096, nil, "", "jellyfin"),
 	web("music-assistant", "Music Assistant", "music-assistant.svg", "http", 8095, nil, "", "musicassistant"),
@@ -116,6 +120,12 @@ var apps = []App{
 	noweb("ubuntu", "Ubuntu", "ubuntu.svg", 0, "ubuntu"),
 }
 
+func init() {
+	sort.SliceStable(apps, func(i, j int) bool {
+		return strings.ToLower(apps[i].Name) < strings.ToLower(apps[j].Name)
+	})
+}
+
 var byID = func() map[string]App {
 	m := make(map[string]App, len(apps))
 	for _, a := range apps {
@@ -124,7 +134,7 @@ var byID = func() map[string]App {
 	return m
 }()
 
-// All returns the catalog in display order (a copy).
+// All returns the catalog sorted by name (a copy).
 func All() []App { return append([]App(nil), apps...) }
 
 // Get looks an application up by ID.
