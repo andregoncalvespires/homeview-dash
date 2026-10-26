@@ -100,6 +100,7 @@ var catalog = map[string]map[string]string{
 		"nav.users":    "Usuários",
 		"nav.devices":  "Meus dispositivos",
 		"nav.logout":   "Sair",
+		"nav.menu":     "Menu",
 
 		"login.title": "Entrar",
 		"login.intro": "Informe seu e-mail cadastrado. Enviaremos um código de verificação.",
@@ -321,6 +322,7 @@ var catalog = map[string]map[string]string{
 		"nav.users":    "Users",
 		"nav.devices":  "My devices",
 		"nav.logout":   "Sign out",
+		"nav.menu":     "Menu",
 
 		"login.title": "Sign in",
 		"login.intro": "Enter your registered e-mail. We will send you a verification code.",

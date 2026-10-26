@@ -481,7 +481,7 @@ func TestGroupPickingInBothForms(t *testing.T) {
 	_ = f
 }
 
-func TestNavLinksAreMutedAndMarkCurrentPage(t *testing.T) {
+func TestMenuMarksCurrentPageAndIsMuted(t *testing.T) {
 	e := newEnv(t)
 	admin := e.login("admin@example.com")
 	_, b := e.get(admin, "/admin/groups")
@@ -489,7 +489,15 @@ func TestNavLinksAreMutedAndMarkCurrentPage(t *testing.T) {
 		t.Errorf("current page not marked:\n%s", b)
 	}
 	r, body := e.get(admin, "/static/app.css")
-	if r.StatusCode != 200 || !strings.Contains(body, ".top nav a { color: var(--muted); }") {
-		t.Error("nav links are not in the muted colour")
+	if r.StatusCode != 200 || !strings.Contains(body, ".menu-panel a, .menu-panel .linkbtn {") || !strings.Contains(body, "color: var(--muted)") {
+		t.Error("menu links are not in the muted colour")
+	}
+	for _, want := range []string{`<details class="menu" id="menu">`, `<summary class="gear"`, `<p class="menu-user">Admin</p>`, `action="/logout"`, `href="/admin/discovery"`, `href="/devices"`} {
+		if !strings.Contains(b, want) {
+			t.Errorf("gear menu lacks %q", want)
+		}
+	}
+	if strings.Contains(b, `<nav aria-label="menu">`) {
+		t.Error("the old inline menu is still there")
 	}
 }

@@ -213,6 +213,14 @@
   if (dim && dim.parentNode.querySelector('output')) {
     dim.addEventListener('input', function () { dim.parentNode.querySelector('output').textContent = dim.value; });
   }
+  // Header menu: a <details> that also closes on Escape and when clicking elsewhere.
+  var menu = document.getElementById('menu');
+  if (menu) {
+    document.addEventListener('click', function (e) { if (menu.open && !menu.contains(e.target)) menu.open = false; });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && menu.open) { menu.open = false; var s = menu.querySelector('summary'); if (s) s.focus(); }
+    });
+  }
   // Confirmation before destructive actions (CSP forbids inline handlers).
   document.addEventListener('submit', function (e) {
     var msg = e.target && e.target.getAttribute && e.target.getAttribute('data-confirm');
