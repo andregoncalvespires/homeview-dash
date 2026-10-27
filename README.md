@@ -8,7 +8,7 @@
 
 ## O que é
 
-O HomeView é uma alternativa simples a painéis como Heimdall e Homarr, pensada para quem tem vários servidores, VMs e containers e quer **controlar quem vê o quê**.
+O HomeView é um painel simples para quem tem vários servidores, VMs e containers e quer **controlar quem vê o quê**.
 
 - **Um único container** de imagem pequena, sem Redis nem Postgres. Os dados ficam em um arquivo SQLite.
 - **Login sem senha**: só quem foi cadastrado pelo administrador entra, recebendo um código por e-mail. O navegador/aparelho fica autorizado por um cookie e pode ser revogado a qualquer momento.

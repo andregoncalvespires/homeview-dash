@@ -8,7 +8,7 @@
 
 ## What it is
 
-HomeView is a simple alternative to dashboards such as Heimdall and Homarr, built for people with several servers, VMs and containers who want to **control who sees what**.
+HomeView is a simple dashboard for people with several servers, VMs and containers who want to **control who sees what**.
 
 - **One small container**, no Redis or Postgres. Data lives in a single SQLite file.
 - **Passwordless sign-in**: only people registered by the administrator can get in, using a code sent by e-mail. The browser/device is then authorised by a cookie and can be revoked at any time.
