@@ -550,6 +550,8 @@
         if (open === c.name + '/' + n.name) openNode = { c: c, n: n };
       });
     });
+    // The cards share the whole line: 1 to 4 per row, whatever the number of nodes.
+    row.className = 'px-row n' + Math.max(1, Math.min(4, row.children.length));
     root.appendChild(row);
     if (openNode) {
       root.appendChild(panel(openNode.c, openNode.n, o));
