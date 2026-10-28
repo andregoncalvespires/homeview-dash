@@ -14,7 +14,7 @@ HomeView is a simple dashboard for people with several servers, VMs and containe
 - **Passwordless sign-in**: only people registered by the administrator can get in, using a code sent by e-mail. The browser/device is then authorised by a cookie and can be revoked at any time.
 - **Admin-only changes**: only administrators add users, groups and services.
 - **Two addresses per service** (internal and external). The dashboard highlights the right one depending on whether you are at home or away, and shows the other as a shortcut.
-- **Portuguese and English UI**, light and dark themes, instant search (press `/`).
+- **Portuguese and English UI**, light and dark themes, instant search in the middle of the header (press `/`; on phones it becomes a magnifier icon).
 
 ### What works today (v0.7)
 

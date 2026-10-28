@@ -10,8 +10,16 @@
 {{if .User}}<link rel="stylesheet" href="/me/theme.css?v={{.ThemeV}}">{{else}}<link rel="stylesheet" href="/theme.css?v={{.AssetV}}">{{end}}
 </head>
 <body{{if .HasBg}} class="has-bg"{{end}}>
-<header class="top">
+<header class="top{{if .Search}} hassearch{{end}}">
   <a class="brand" href="/"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><use href="/static/favicon.svg#icon"/></svg>HomeView</a>
+  {{if .Search}}
+  <div class="searchbox" id="searchbox">
+    <button class="searchbtn" type="button" id="searchbtn" aria-label="{{t .Lang "dash.search.open"}}" title="{{t .Lang "dash.search.open"}}">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    </button>
+    <input id="q" type="search" placeholder="{{t .Lang "dash.search"}}" aria-label="{{t .Lang "dash.search"}}" autocomplete="off">
+  </div>
+  {{end}}
   <div class="topright">
   {{if .Views}}
   <details class="menu viewmenu" id="viewmenu">

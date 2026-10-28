@@ -288,6 +288,7 @@ type page struct {
 	HasBg    bool
 	ThemeV   string    // cache-busting version of /me/theme.css
 	AssetV   string    // cache-busting version of app.css/app.js
+	Search   bool      // show the search box in the header (dashboard)
 	Views    *viewMenu // dashboard view picker, shown next to the gear
 }
 

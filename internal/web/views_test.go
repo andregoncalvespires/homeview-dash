@@ -107,3 +107,21 @@ func TestLoginLooksLikeTheDefaultDashboard(t *testing.T) {
 		t.Errorf("default theme.css: %d %s", r.StatusCode, css)
 	}
 }
+
+func TestSearchLivesInTheHeader(t *testing.T) {
+	e := newEnv(t)
+	admin := e.login("admin@example.com")
+	if _, b := e.get(admin, "/"); strings.Contains(b, `id="searchbox"`) || strings.Contains(b, `id="q"`) {
+		t.Error("an empty dashboard has nothing to search")
+	}
+	sv := store.Service{Name: "A", InternalURL: "http://10.0.0.1"}
+	_ = e.st.SaveService(context.Background(), &sv)
+	_, b := e.get(admin, "/")
+	h := strings.Index(b, "</header>")
+	if i := strings.Index(b, `id="searchbox"`); i < 0 || i > h || !strings.Contains(b[:h], `id="searchbtn"`) || !strings.Contains(b[:h], `class="top hassearch"`) {
+		t.Error("search box should be inside the header, with its icon button")
+	}
+	if strings.Index(b[h:], `id="q"`) >= 0 {
+		t.Error("search input duplicated in the page body")
+	}
+}

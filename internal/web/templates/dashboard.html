@@ -1,11 +1,12 @@
 {{define "content"}}
 {{if .Data.HasServices}}
+{{if and .User.IsAdmin (eq .Data.Mode "groups")}}
 <div class="toolbar">
-  <input id="q" type="search" placeholder="{{t .Lang "dash.search"}}" aria-label="{{t .Lang "dash.search"}}" autocomplete="off">
-  {{if and .User.IsAdmin (eq .Data.Mode "groups")}}<button id="reorder" class="btn" type="button" hidden aria-pressed="false" data-save="/admin/layout" data-csrf="{{.CSRF}}"
+  <button id="reorder" class="btn" type="button" hidden aria-pressed="false" data-save="/admin/layout" data-csrf="{{.CSRF}}"
     data-label-done="{{t .Lang "dash.reorder.done"}}" data-label-start="{{t .Lang "dash.reorder"}}" data-saved="{{t .Lang "dash.reorder.saved"}}" data-failed="{{t .Lang "dash.reorder.failed"}}">{{t .Lang "dash.reorder"}}</button>
-  <span id="reorder-status" class="muted" role="status" aria-live="polite"></span>{{end}}
+  <span id="reorder-status" class="muted" role="status" aria-live="polite"></span>
 </div>
+{{end}}
 {{if and .User.IsAdmin (eq .Data.Mode "groups")}}<p id="reorder-help" class="muted" hidden>{{t .Lang "dash.reorder.help"}}</p>{{end}}
 <div class="cols" id="cols">
 {{range .Data.Groups}}

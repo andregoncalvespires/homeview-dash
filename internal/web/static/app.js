@@ -19,17 +19,24 @@
       });
       if (none) none.hidden = shown !== 0;
     };
+    var top = document.querySelector('.top'), sbtn = document.getElementById('searchbtn');
+    var narrow = function () { return window.matchMedia('(max-width: 640px)').matches; };
+    // On a narrow screen the box is only an icon until it is tapped.
+    var openSearch = function () { if (narrow() && top) top.classList.add('search-open'); q.focus(); };
+    var closeSearch = function () { if (top) top.classList.remove('search-open'); };
+    if (sbtn) sbtn.addEventListener('click', openSearch);
+    q.addEventListener('blur', function () { if (narrow() && q.value.trim() === '') closeSearch(); });
     q.addEventListener('input', apply);
     q.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') {
         var first = document.querySelector('.card:not([hidden]) .card-main');
         if (first) window.open(first.href, '_blank', 'noopener');
-      } else if (e.key === 'Escape') { q.value = ''; apply(); }
+      } else if (e.key === 'Escape') { q.value = ''; apply(); closeSearch(); q.blur(); }
     });
     document.addEventListener('keydown', function (e) {
       var t = e.target && e.target.tagName;
       if (e.key === '/' && t !== 'INPUT' && t !== 'TEXTAREA' && t !== 'SELECT') {
-        e.preventDefault(); q.focus();
+        e.preventDefault(); openSearch();
       }
     });
   }

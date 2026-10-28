@@ -337,7 +337,8 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 		}
 		sections = append(sections, other)
 	}
-	s.render(w, r, sess, "dashboard", http.StatusOK, &page{Data: finish(sections), Views: s.viewMenu(lang, mode)})
+	data := finish(sections)
+	s.render(w, r, sess, "dashboard", http.StatusOK, &page{Data: data, Views: s.viewMenu(lang, mode), Search: data.HasServices})
 }
 
 // ---- devices ----

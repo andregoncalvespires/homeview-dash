@@ -14,7 +14,7 @@ O HomeView é um painel simples para quem tem vários servidores, VMs e containe
 - **Login sem senha**: só quem foi cadastrado pelo administrador entra, recebendo um código por e-mail. O navegador/aparelho fica autorizado por um cookie e pode ser revogado a qualquer momento.
 - **Só administradores** adicionam usuários, grupos e serviços.
 - **Dois endereços por serviço** (interno e externo). O painel destaca o endereço certo conforme você acessa de casa ou de fora, e mostra o outro como atalho.
-- **Interface em português e inglês**, clara no tema claro e no escuro, com busca instantânea (tecle `/`).
+- **Interface em português e inglês**, clara no tema claro e no escuro, com busca instantânea no centro do cabeçalho (tecle `/`; no celular vira um ícone de lupa).
 
 ### O que já funciona (v0.7)
 
