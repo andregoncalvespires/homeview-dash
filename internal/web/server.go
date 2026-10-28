@@ -111,6 +111,8 @@ func (s *Server) Handler() http.Handler {
 	})
 
 	// Public.
+	mux.HandleFunc("GET /manifest.webmanifest", s.getManifest)
+	mux.HandleFunc("GET /sw.js", s.getServiceWorker)
 	mux.HandleFunc("GET /login", s.getLogin)
 	mux.HandleFunc("POST /login", s.postLogin)
 	mux.HandleFunc("GET /verify", s.getVerify)

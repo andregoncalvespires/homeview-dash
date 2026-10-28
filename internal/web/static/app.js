@@ -596,3 +596,29 @@
   start();
   load();
 })();
+
+// Installable app (PWA): register the service worker and offer "Install app" in
+// the gear menu when the browser says the app can be installed. iOS has no such
+// event; there the user installs through Share → Add to Home Screen.
+(function () {
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function () { /* optional feature */ });
+    });
+  }
+  var btn = document.getElementById('pwa-install');
+  var deferred = null;
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferred = e;
+    if (btn) btn.hidden = false;
+  });
+  window.addEventListener('appinstalled', function () { deferred = null; if (btn) btn.hidden = true; });
+  if (btn) btn.addEventListener('click', function () {
+    if (!deferred) return;
+    var d = deferred;
+    deferred = null;
+    btn.hidden = true;
+    d.prompt();
+  });
+})();

@@ -4,7 +4,7 @@
 
 [English](README.en.md) · **Português (Brasil)**
 
-![licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue) ![status](https://img.shields.io/badge/status-v0.8%20em%20desenvolvimento-orange)
+![licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue) ![status](https://img.shields.io/badge/status-v0.9%20em%20desenvolvimento-orange)
 
 ## O que é
 
@@ -16,7 +16,7 @@ O HomeView é um painel simples para quem tem vários servidores, VMs e containe
 - **Dois endereços por serviço** (interno e externo). O painel destaca o endereço certo conforme você acessa de casa ou de fora, e mostra o outro como atalho.
 - **Interface em português e inglês**, clara no tema claro e no escuro, com busca instantânea no centro do cabeçalho (tecle `/`; no celular vira um ícone de lupa).
 
-### O que já funciona (v0.8)
+### O que já funciona (v0.9)
 
 - **Login sem senha**: código por e-mail + cookie por dispositivo, com a tela "Meus dispositivos" para revogar. Link de acesso único pelo console, para recuperação caso o e-mail falhe.
 - **Administrador criado pelo console**, sem gravar nada no `docker-compose.yml`.
@@ -24,6 +24,7 @@ O HomeView é um painel simples para quem tem vários servidores, VMs e containe
 - **Descoberta pelo Proxmox**: lê as VMs e LXCs do seu servidor ou cluster; você aprova o que vai para o painel, **com vários serviços por VM/LXC** e a possibilidade de apontar para o **IP do próprio host Proxmox**. O ponto verde/cinza mostra se estão rodando.
 - **Três visões do painel** (ícone de camadas ao lado da engrenagem): **Grupos** (os seus), **Infraestrutura** (por VM/LXC do Proxmox, com status e IP) e **Tipo** (Automação, Rede, Mídia…, com o tipo editável por serviço). A escolha fica salva no navegador.
 - **Métricas do Proxmox no topo do painel**: uma linha com um cartão por nó (CPU, memória e o uso de cada storage), até 4 por linha, e o botão **Ver VM/LXC** que abre, sobre os cards, o quadro de máquinas daquele nó (CPU, memória, disco e rede). Alertas de limite configuráveis. O administrador libera por usuário o que cada pessoa vê.
+- **Instalável como aplicativo (PWA)** no celular e no computador, com ícone próprio, tela cheia e abertura rápida.
 - **Painel organizável**: reorganizar arrastando cards e grupos (duas colunas de grupos), **recolher/expandir grupos** (lembrado no navegador) e busca instantânea.
 - **Subgrupos e permissões por grupo**: um grupo pode ser restrito a administradores e às pessoas escolhidas (vale também para os subgrupos e em todas as visões).
 - **Editor YAML** de grupos, subgrupos, permissões e serviços, com validação antes de aplicar e download do arquivo.
@@ -34,7 +35,7 @@ O HomeView é um painel simples para quem tem vários servidores, VMs e containe
 
 | Versão | Entrega |
 |---|---|
-| v0.9 | A definir (ideias: permissões por papel, histórico de alterações) |
+| v1.0 | A definir (ideias: permissões por papel, histórico de alterações) |
 
 ## Instalação (3 passos)
 
@@ -152,6 +153,17 @@ Com uma conexão cadastrada (veja acima), o topo do painel mostra uma linha com 
 - **O que cada um escolhe**: em **Aparência → Informações do Proxmox**, dentro do que foi liberado: mostrar nós, mostrar VMs/LXCs, destacar alertas, quais colunas o quadro mostra, os limites de **aviso** (amarelo, padrão 75%) e **crítico** (vermelho, padrão 90%) e o intervalo de atualização (padrão 30 s, de 10 a 600).
 - **Alertas**: o cartão ganha borda amarela ou vermelha quando CPU, memória ou um storage passam do limite, e o botão **Ver VM/LXC** mostra um selo com quantas máquinas estão em alerta, mesmo com o quadro fechado.
 - **Como os dados chegam**: o servidor lê o Proxmox com o mesmo token somente leitura da descoberta (papel *PVEAuditor*) e só quando alguém está com o painel aberto; várias pessoas compartilham a mesma leitura (renovada a cada 10 s no máximo). Se um servidor deixar de responder, o cartão mostra os últimos valores com o aviso *Dados desatualizados*. A taxa de rede é calculada entre duas leituras. VMs sem o *QEMU Guest Agent* não informam o uso de disco, então só o tamanho aparece.
+
+### Instalar como aplicativo (PWA)
+
+O HomeView pode ser instalado como um aplicativo, com ícone na tela inicial e sem a barra do navegador.
+
+- **Pré-requisito: HTTPS.** Os navegadores só liberam a instalação em endereço seguro (`https://`), o que já é o caso atrás de um proxy reverso ou de um Cloudflare Tunnel (veja acima). Em `http://IP:porta` na rede local o botão de instalar não aparece, só em `localhost`.
+- **Android (Chrome)**: menu ⚙ → **Instalar aplicativo** (ou menu do Chrome → *Instalar app*).
+- **iPhone/iPad (Safari)**: botão *Compartilhar* → **Adicionar à Tela de Início**.
+- **Computador (Chrome/Edge)**: ícone de instalar na barra de endereços, ou menu ⚙ → **Instalar aplicativo**.
+
+O aplicativo guarda só os arquivos do próprio HomeView (estilos, scripts e ícones) para abrir mais rápido. **Nenhuma página, dado do Proxmox ou imagem enviada fica guardado no aparelho**: sem conexão aparece apenas um aviso com o botão *Tentar de novo*. O login continua valendo pelo cookie do dispositivo. Para gerar os ícones de novo: `python3 tools/icons/gen.py internal/web/static/pwa` (precisa do Pillow).
 
 ### Visões do painel
 

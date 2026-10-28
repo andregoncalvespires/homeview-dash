@@ -2,10 +2,18 @@
 <html lang="{{.Lang}}" data-theme="{{.Theme}}">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>{{if .Title}}{{.Title}} · {{end}}HomeView</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/static/pwa/apple-touch-icon.png">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171b23" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="HomeView">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="/static/app.css?v={{.AssetV}}">
 {{if .User}}<link rel="stylesheet" href="/me/theme.css?v={{.ThemeV}}">{{else}}<link rel="stylesheet" href="/theme.css?v={{.AssetV}}">{{end}}
 </head>
@@ -51,6 +59,7 @@
       {{end}}
       <a href="/settings"{{if eq .Path "/settings"}} aria-current="page"{{end}}>{{t .Lang "nav.settings"}}</a>
       <a href="/devices"{{if eq .Path "/devices"}} aria-current="page"{{end}}>{{t .Lang "nav.devices"}}</a>
+      <button class="linkbtn" id="pwa-install" type="button" hidden>{{t .Lang "pwa.install"}}</button>
       <hr>
       <form method="post" action="/logout">
         <input type="hidden" name="csrf" value="{{.CSRF}}">

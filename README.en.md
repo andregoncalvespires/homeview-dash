@@ -4,7 +4,7 @@
 
 **English** · [Português (Brasil)](README.md)
 
-![MIT license](https://img.shields.io/badge/license-MIT-blue) ![status](https://img.shields.io/badge/status-v0.8%20in%20development-orange)
+![MIT license](https://img.shields.io/badge/license-MIT-blue) ![status](https://img.shields.io/badge/status-v0.9%20in%20development-orange)
 
 ## What it is
 
@@ -16,7 +16,7 @@ HomeView is a simple dashboard for people with several servers, VMs and containe
 - **Two addresses per service** (internal and external). The dashboard highlights the right one depending on whether you are at home or away, and shows the other as a shortcut.
 - **Portuguese and English UI**, light and dark themes, instant search in the middle of the header (press `/`; on phones it becomes a magnifier icon).
 
-### What works today (v0.8)
+### What works today (v0.9)
 
 - **Passwordless sign-in**: e-mail code + per-device cookie, with a "My devices" page to revoke access. A one-time sign-in link from the console is the recovery path if e-mail is down.
 - **Administrator created from the console**, nothing written to `docker-compose.yml`.
@@ -24,6 +24,7 @@ HomeView is a simple dashboard for people with several servers, VMs and containe
 - **Proxmox discovery**: reads the VMs and LXCs of your server or cluster; you approve what goes on the dashboard, with **several services per VM/LXC** and the option to point at the **Proxmox host's own IP**. A green/grey dot shows whether they are running.
 - **Three dashboard views** (layers icon next to the gear): **Groups** (your own), **Infrastructure** (by Proxmox VM/LXC, with status and IP) and **Type** (Automation, Network, Media…, with an editable type per service). The choice is remembered in the browser.
 - **Proxmox figures at the top of the dashboard**: a row with one card per node (CPU, memory and the usage of every storage), up to 4 per row, and a **Show VMs/LXCs** button that opens the node's machines panel (CPU, memory, disk and network) over the cards. Configurable threshold alerts. The administrator decides per user what each person sees.
+- **Installable as an app (PWA)** on phones and computers, with its own icon, full-screen and fast start.
 - **Organisable dashboard**: rearrange cards and groups by dragging (two columns of groups), **collapse/expand groups** (remembered in the browser) and instant search.
 - **Sub-groups and per-group permissions**: a group can be restricted to administrators and the people you choose (applies to its sub-groups and to every view).
 - **YAML editor** for groups, sub-groups, permissions and services, with validation before applying and file download.
@@ -34,7 +35,7 @@ HomeView is a simple dashboard for people with several servers, VMs and containe
 
 | Version | Delivery |
 |---|---|
-| v0.9 | To be decided (ideas: role-based permissions, change history) |
+| v1.0 | To be decided (ideas: role-based permissions, change history) |
 
 ## Install (3 steps)
 
@@ -152,6 +153,17 @@ With a connection set up (see above), the top of the dashboard shows a row with 
 - **What each person chooses**: under **Appearance → Proxmox information**, within what was allowed: show nodes, show VMs/LXCs, highlight alerts, which columns the panel shows, the **warning** (yellow, default 75%) and **critical** (red, default 90%) thresholds and the refresh interval (default 30 s, 10 to 600).
 - **Alerts**: a card gets a yellow or red border when CPU, memory or a storage passes a threshold, and the **Show VMs/LXCs** button shows a badge with the number of machines in alert even while the panel is closed.
 - **How the data arrives**: the server reads Proxmox with the same read-only token as discovery (*PVEAuditor* role) and only while someone has the dashboard open; several people share one reading (refreshed at most every 10 s). If a server stops answering, the card keeps the last values with a *Stale data* note. The network rate is computed between two readings. VMs without the *QEMU Guest Agent* report no disk usage, so only the size is shown.
+
+### Install as an app (PWA)
+
+HomeView can be installed as an app, with a home-screen icon and no browser bar.
+
+- **Requirement: HTTPS.** Browsers only offer installation on a secure address (`https://`), which is already the case behind a reverse proxy or a Cloudflare Tunnel (see above). On `http://IP:port` in a local network the install option does not appear, except on `localhost`.
+- **Android (Chrome)**: ⚙ menu → **Install app** (or Chrome's menu → *Install app*).
+- **iPhone/iPad (Safari)**: *Share* button → **Add to Home Screen**.
+- **Computer (Chrome/Edge)**: the install icon in the address bar, or ⚙ menu → **Install app**.
+
+The app keeps only HomeView's own files (styles, scripts and icons) to start faster. **No page, Proxmox figure or uploaded image is stored on the device**: when offline you only get a notice with a *Try again* button. Sign-in still lasts through the device cookie. To regenerate the icons: `python3 tools/icons/gen.py internal/web/static/pwa` (needs Pillow).
 
 ### Dashboard views
 

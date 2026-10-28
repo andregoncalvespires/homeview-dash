@@ -341,3 +341,8 @@ details.access label.check { justify-content: flex-start; display: flex; align-i
 form.pxacc { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem .9rem; }
 .form label.check { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; flex-wrap: nowrap; gap: .5rem; font-weight: 400; text-align: left; }
 .form label.check input { margin: 0; flex: none; }
+
+/* Installed app: keep the header clear of the notch and the system bars. */
+.top { padding-top: max(.75rem, env(safe-area-inset-top)); padding-left: max(1.25rem, env(safe-area-inset-left)); padding-right: max(1.25rem, env(safe-area-inset-right)); }
+main { padding-left: max(1.25rem, env(safe-area-inset-left)); padding-right: max(1.25rem, env(safe-area-inset-right)); }
+footer { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
