@@ -288,6 +288,8 @@
   var every = Math.max(10, parseInt(root.getAttribute('data-refresh'), 10) || 30) * 1000;
   var url = root.getAttribute('data-url');
   var lang = document.documentElement.lang || undefined;
+  var stOpen = {}; // nodes whose full storage list is expanded
+  var ST_MAX = 6; // storages shown before "+N"
   var data = null, open = null, filter = 'all', collapsed = false, timer = null;
   try { collapsed = localStorage.getItem('hv_px_collapsed') === '1'; } catch (e) { /* storage may be blocked */ }
 
@@ -385,10 +387,17 @@
       gs.appendChild(gauge(L.mem, mp, size(n.mem[0]) + ' / ' + size(n.mem[1]), o));
       card.appendChild(gs);
       if (n.storages.length) {
+        // Two columns when the card is wide. Storages in alert come first and are
+        // always shown; the rest is cut at ST_MAX behind a "+N" toggle.
+        var skey = c.name + '/' + n.name;
+        var rank = function (s) { var l = lvl(pct(s.used, s.total), o); return l === 'bad' ? 0 : l === 'warn' ? 1 : 2; };
+        var sorted = n.storages.slice().sort(function (a, b) { return rank(a) - rank(b) || (a.name < b.name ? -1 : 1); });
+        var alerting = sorted.filter(function (s) { return rank(s) < 2; }).length;
+        var limit = stOpen[skey] ? sorted.length : Math.max(ST_MAX, alerting);
         var st = el('div', 'px-st');
-        n.storages.forEach(function (s) {
+        sorted.slice(0, limit).forEach(function (s) {
           var p = pct(s.used, s.total);
-          var row = el('div');
+          var row = el('div', lvl(p, o));
           row.appendChild(el('span', '', s.name));
           row.appendChild(bar(p, o));
           row.appendChild(el('span', '', num(p, 0) + '%'));
@@ -396,6 +405,13 @@
           st.appendChild(row);
         });
         card.appendChild(st);
+        if (sorted.length > Math.max(ST_MAX, alerting)) {
+          var mb = el('button', 'px-stmore', stOpen[skey] ? L.stless : L.stmore.replace('{n}', String(sorted.length - limit)));
+          mb.type = 'button';
+          mb.setAttribute('aria-expanded', stOpen[skey] ? 'true' : 'false');
+          mb.addEventListener('click', function (e) { e.stopPropagation(); stOpen[skey] = !stOpen[skey]; render(); });
+          card.appendChild(mb);
+        }
       }
     }
     if (o.machines && n.guests.length) {

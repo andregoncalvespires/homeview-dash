@@ -18,7 +18,7 @@ const metricsMaxAge = 10 * time.Second
 
 // pxLabels are the texts the dashboard script needs (keys of the px.* messages).
 var pxLabels = []string{"cpu", "mem", "disk", "net", "up", "vcpu", "show", "hide", "all", "vms", "lxcs", "alerts",
-	"none", "noread", "offline", "running", "stopped", "title", "alertn", "stale", "close", "machines", "vm", "lxc", "storage"}
+	"none", "noread", "offline", "running", "stopped", "title", "alertn", "stale", "close", "machines", "vm", "lxc", "storage", "stmore", "stless"}
 
 // metricsAccess returns what u may see. Administrators see everything.
 func (s *Server) metricsAccess(ctx context.Context, u *store.User) store.MetricsAccess {
