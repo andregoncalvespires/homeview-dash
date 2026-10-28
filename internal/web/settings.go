@@ -39,6 +39,7 @@ type settingsData struct {
 	Custom   string // colour shown in the custom picker
 	BgURL    string // the user's own upload, if any
 	Walls    []wallView
+	PX       pxSettings
 }
 
 type wallView struct {
@@ -80,7 +81,12 @@ func (s *Server) getSettings(w http.ResponseWriter, r *http.Request, sess *sessi
 		s.serverError(w, r, sess, err)
 		return
 	}
-	s.render(w, r, sess, "settings", http.StatusOK, &page{TitleKey: "settings.title", Data: s.loadSettings(sess, p)})
+	data := s.loadSettings(sess, p)
+	if data.PX, err = s.loadPxSettings(r.Context(), sess.User); err != nil {
+		s.serverError(w, r, sess, err)
+		return
+	}
+	s.render(w, r, sess, "settings", http.StatusOK, &page{TitleKey: "settings.title", Data: data})
 }
 
 func (s *Server) postAppearance(w http.ResponseWriter, r *http.Request, sess *session) {

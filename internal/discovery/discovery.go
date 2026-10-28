@@ -25,6 +25,7 @@ import (
 type Client interface {
 	Guests(ctx context.Context) ([]proxmox.Guest, error)
 	Nodes(ctx context.Context) ([]proxmox.Node, error)
+	Metrics(ctx context.Context) (proxmox.Metrics, error)
 }
 
 // InputError reports invalid form input; Key is an i18n message key.
@@ -50,6 +51,11 @@ type Service struct {
 	Now       func() time.Time
 
 	mu sync.Mutex // one sync at a time
+
+	mm    sync.Mutex // guards the metrics cache; held while refreshing
+	cache map[int64]*Reading
+	pm    sync.Mutex // guards prev (read concurrently per connection)
+	prev  map[string]sample
 }
 
 // New builds a Service. secret is the server secret used to encrypt tokens.

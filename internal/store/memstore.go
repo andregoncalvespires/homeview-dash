@@ -26,6 +26,8 @@ type MemStore struct {
 	nodes    map[int64][]Node
 	icons    map[int64]*iconRow
 	prefs    map[int64]*prefsRow
+	pxAccess map[int64]MetricsAccess
+	pxPrefs  map[int64]MetricsPrefs
 }
 
 type prefsRow struct {
@@ -58,6 +60,8 @@ func NewMemStore() *MemStore {
 		guests:   map[int64]*Guest{},
 		nodes:    map[int64][]Node{},
 		icons:    map[int64]*iconRow{},
+		pxAccess: map[int64]MetricsAccess{},
+		pxPrefs:  map[int64]MetricsPrefs{},
 		prefs:    map[int64]*prefsRow{},
 	}
 }
@@ -153,6 +157,8 @@ func (m *MemStore) DeleteUser(_ context.Context, id int64) error {
 		g.UserIDs = removeID(g.UserIDs, id)
 	}
 	delete(m.prefs, id)
+	delete(m.pxAccess, id)
+	delete(m.pxPrefs, id)
 	delete(m.codes, id)
 	for h, l := range m.links {
 		if l.userID == id {
@@ -713,6 +719,59 @@ func (m *MemStore) SetBgPreset(_ context.Context, userID int64, preset string) e
 	r := m.prefsFor(userID)
 	r.HasBg, r.bgType, r.bgData, r.BgVersion = false, "", nil, 0
 	r.BgPreset = preset
+	return nil
+}
+
+func (m *MemStore) GetMetricsAccess(_ context.Context, userID int64) (MetricsAccess, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	a := m.pxAccess[userID]
+	a.UserID = userID
+	return a, nil
+}
+
+func (m *MemStore) SetMetricsAccess(_ context.Context, a MetricsAccess) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.users[a.UserID]; !ok {
+		return ErrNotFound
+	}
+	m.pxAccess[a.UserID] = a
+	return nil
+}
+
+func (m *MemStore) ListMetricsAccess(_ context.Context) ([]MetricsAccess, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []MetricsAccess
+	for _, a := range m.pxAccess {
+		if a.Any() {
+			out = append(out, a)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].UserID < out[j].UserID })
+	return out, nil
+}
+
+func (m *MemStore) GetMetricsPrefs(_ context.Context, userID int64) (MetricsPrefs, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if p, ok := m.pxPrefs[userID]; ok {
+		return p, nil
+	}
+	return DefaultMetricsPrefs(userID), nil
+}
+
+func (m *MemStore) SetMetricsPrefs(_ context.Context, p MetricsPrefs) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.users[p.UserID]; !ok {
+		return ErrNotFound
+	}
+	if !p.Valid() {
+		return errors.New("store: invalid metrics preferences")
+	}
+	m.pxPrefs[p.UserID] = p
 	return nil
 }
 

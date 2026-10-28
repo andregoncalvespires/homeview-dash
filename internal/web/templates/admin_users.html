@@ -16,15 +16,27 @@
     <button class="btn primary" type="submit">{{t .Lang "f.add"}}</button>
   </form>
 </section>
+<p class="muted">{{t .Lang "admin.px.help"}}</p>
 <div class="tablewrap">
 <table>
-  <thead><tr><th>{{t .Lang "f.name"}}</th><th>{{t .Lang "f.email"}}</th><th>{{t .Lang "f.role"}}</th><th></th></tr></thead>
+  <thead><tr><th>{{t .Lang "f.name"}}</th><th>{{t .Lang "f.email"}}</th><th>{{t .Lang "f.role"}}</th><th>{{t .Lang "admin.users.px"}}</th><th></th></tr></thead>
   <tbody>
   {{range .Data.Users}}
   <tr>
     <td>{{.Name}}</td>
     <td>{{.Email}}</td>
     <td>{{if .IsAdmin}}{{t $.Lang "role.admin"}}{{else}}{{t $.Lang "role.user"}}{{end}}</td>
+    <td>
+      {{if .IsAdmin}}<span class="muted">{{t $.Lang "admin.px.always"}}</span>{{else}}
+      <form method="post" action="/admin/users/proxmox" class="inline pxacc">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}"><input type="hidden" name="id" value="{{.ID}}">
+        <label class="check"><input type="checkbox" name="nodes" value="1"{{if .PX.Nodes}} checked{{end}}> {{t $.Lang "admin.px.nodes"}}</label>
+        <label class="check"><input type="checkbox" name="machines" value="1"{{if .PX.Machines}} checked{{end}}> {{t $.Lang "admin.px.machines"}}</label>
+        <label class="check"><input type="checkbox" name="alerts" value="1"{{if .PX.Alerts}} checked{{end}}> {{t $.Lang "admin.px.alerts"}}</label>
+        <button class="btn small" type="submit">{{t $.Lang "f.save"}}</button>
+      </form>
+      {{end}}
+    </td>
     <td class="right">
       {{if ne .ID $.User.ID}}
       <form method="post" action="/admin/users/delete" class="inline" data-confirm="{{t $.Lang "f.confirm"}}">

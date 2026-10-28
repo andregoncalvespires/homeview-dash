@@ -15,14 +15,17 @@ import (
 )
 
 type fake struct {
-	guests []proxmox.Guest
-	nodes  []proxmox.Node
-	err    error
-	cfgs   *[]proxmox.Config
+	guests  []proxmox.Guest
+	nodes   []proxmox.Node
+	err     error
+	metrics proxmox.Metrics
+	merr    error
+	cfgs    *[]proxmox.Config
 }
 
-func (f fake) Guests(context.Context) ([]proxmox.Guest, error) { return f.guests, f.err }
-func (f fake) Nodes(context.Context) ([]proxmox.Node, error)   { return f.nodes, nil }
+func (f fake) Guests(context.Context) ([]proxmox.Guest, error)  { return f.guests, f.err }
+func (f fake) Metrics(context.Context) (proxmox.Metrics, error) { return f.metrics, f.merr }
+func (f fake) Nodes(context.Context) ([]proxmox.Node, error)    { return f.nodes, nil }
 
 func newSvc(t *testing.T, f *fake) (*Service, *store.MemStore) {
 	t.Helper()
@@ -276,5 +279,48 @@ func TestNodeAddresses(t *testing.T) {
 	}
 	if got := hostOf("https://[fe80::1]:8006"); got == "pve" || strings.ContainsAny(got, "[]/ ") {
 		t.Errorf("hostOf v6 = %q", got)
+	}
+}
+
+func TestReadings(t *testing.T) {
+	f := &fake{metrics: proxmox.Metrics{
+		Nodes:  []proxmox.NodeMetrics{{Name: "pve1", Online: true, CPU: .2}},
+		Guests: []proxmox.GuestMetrics{{VMID: 103, Kind: "lxc", Name: "docker", Node: "pve1", Running: true, NetIn: 1000, NetOut: 500}},
+	}}
+	s, _ := newSvc(t, f)
+	ctx := context.Background()
+	if _, err := s.SaveConnection(ctx, 0, good); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(1_700_000_000, 0)
+	s.Now = func() time.Time { return now }
+
+	rs := s.Readings(ctx, 10*time.Second)
+	if len(rs) != 1 || rs[0].ConnName != "Casa" || rs[0].Err != "" || len(rs[0].Nodes) != 1 || rs[0].Guests[0].RateIn != 0 {
+		t.Fatalf("first reading: %+v", rs)
+	}
+
+	// Within maxAge nothing is fetched again.
+	n := len(*f.cfgs)
+	s.Now = func() time.Time { return now.Add(5 * time.Second) }
+	s.Readings(ctx, 10*time.Second)
+	if len(*f.cfgs) != n {
+		t.Fatal("a fresh reading must be served from the cache")
+	}
+
+	// Later: counters grew, so a rate appears.
+	f.metrics.Guests = []proxmox.GuestMetrics{{VMID: 103, Kind: "lxc", Name: "docker", Node: "pve1", Running: true, NetIn: 3000, NetOut: 1500}}
+	s.Now = func() time.Time { return now.Add(20 * time.Second) }
+	rs = s.Readings(ctx, 10*time.Second)
+	if g := rs[0].Guests[0]; g.RateIn != 100 || g.RateOut != 50 {
+		t.Fatalf("rates = %v / %v, want 100 / 50", g.RateIn, g.RateOut)
+	}
+
+	// A failing server keeps the last figures and reports the error.
+	f.merr = errors.New("boom")
+	s.Now = func() time.Time { return now.Add(60 * time.Second) }
+	rs = s.Readings(ctx, 10*time.Second)
+	if rs[0].Err != "boom" || len(rs[0].Nodes) != 1 {
+		t.Fatalf("stale reading expected: %+v", rs[0])
 	}
 }

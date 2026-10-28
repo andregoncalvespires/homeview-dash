@@ -42,10 +42,13 @@ var schemaV7 string
 //go:embed schema_v8.sql
 var schemaV8 string
 
+//go:embed schema_v9.sql
+var schemaV9 string
+
 const splitMarker = "-- +split"
 
 // migrations are applied in order; PRAGMA user_version records how many ran.
-var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8}
+var migrations = []string{schemaV1, schemaV2, schemaV3, schemaV4, schemaV5, schemaV6, schemaV7, schemaV8, schemaV9}
 
 // Store is the SQLite-backed store.
 type Store struct{ db *sql.DB }
@@ -860,6 +863,85 @@ func (s *Store) SetBgPreset(ctx context.Context, userID int64, preset string) er
 		`INSERT INTO user_prefs(user_id, bg_preset) VALUES(?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET bg_preset = excluded.bg_preset, bg_type = '', bg_data = NULL, bg_version = 0`,
 		userID, preset)
+	if isFK(err) {
+		return store.ErrNotFound
+	}
+	return err
+}
+
+// ---- Proxmox figures ----
+
+func (s *Store) GetMetricsAccess(ctx context.Context, userID int64) (store.MetricsAccess, error) {
+	a := store.MetricsAccess{UserID: userID}
+	var n, m, al int
+	err := s.db.QueryRowContext(ctx, `SELECT nodes, machines, alerts FROM px_access WHERE user_id = ?`, userID).Scan(&n, &m, &al)
+	if isNoRows(err) {
+		return a, nil
+	}
+	a.Nodes, a.Machines, a.Alerts = n != 0, m != 0, al != 0
+	return a, err
+}
+
+func (s *Store) SetMetricsAccess(ctx context.Context, a store.MetricsAccess) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO px_access(user_id, nodes, machines, alerts) VALUES(?, ?, ?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET nodes = excluded.nodes, machines = excluded.machines, alerts = excluded.alerts`,
+		a.UserID, boolInt(a.Nodes), boolInt(a.Machines), boolInt(a.Alerts))
+	if isFK(err) {
+		return store.ErrNotFound
+	}
+	return err
+}
+
+func (s *Store) ListMetricsAccess(ctx context.Context) ([]store.MetricsAccess, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT user_id, nodes, machines, alerts FROM px_access WHERE nodes + machines + alerts > 0 ORDER BY user_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []store.MetricsAccess
+	for rows.Next() {
+		var a store.MetricsAccess
+		var n, m, al int
+		if err := rows.Scan(&a.UserID, &n, &m, &al); err != nil {
+			return nil, err
+		}
+		a.Nodes, a.Machines, a.Alerts = n != 0, m != 0, al != 0
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) GetMetricsPrefs(ctx context.Context, userID int64) (store.MetricsPrefs, error) {
+	p := store.DefaultMetricsPrefs(userID)
+	var b [7]int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT nodes, machines, alerts, cpu, mem, disk, net, warn, crit, refresh FROM px_prefs WHERE user_id = ?`, userID).
+		Scan(&b[0], &b[1], &b[2], &b[3], &b[4], &b[5], &b[6], &p.Warn, &p.Crit, &p.Refresh)
+	if isNoRows(err) {
+		return store.DefaultMetricsPrefs(userID), nil
+	}
+	if err != nil {
+		return p, err
+	}
+	p.Nodes, p.Machines, p.Alerts = b[0] != 0, b[1] != 0, b[2] != 0
+	p.CPU, p.Mem, p.Disk, p.Net = b[3] != 0, b[4] != 0, b[5] != 0, b[6] != 0
+	return p, nil
+}
+
+func (s *Store) SetMetricsPrefs(ctx context.Context, p store.MetricsPrefs) error {
+	if !p.Valid() {
+		return fmt.Errorf("invalid metrics preferences")
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO px_prefs(user_id, nodes, machines, alerts, cpu, mem, disk, net, warn, crit, refresh)
+		 VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET nodes = excluded.nodes, machines = excluded.machines, alerts = excluded.alerts,
+		   cpu = excluded.cpu, mem = excluded.mem, disk = excluded.disk, net = excluded.net,
+		   warn = excluded.warn, crit = excluded.crit, refresh = excluded.refresh`,
+		p.UserID, boolInt(p.Nodes), boolInt(p.Machines), boolInt(p.Alerts), boolInt(p.CPU), boolInt(p.Mem),
+		boolInt(p.Disk), boolInt(p.Net), p.Warn, p.Crit, p.Refresh)
 	if isFK(err) {
 		return store.ErrNotFound
 	}

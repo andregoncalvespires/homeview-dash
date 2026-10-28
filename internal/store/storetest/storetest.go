@@ -24,6 +24,7 @@ func Run(t *testing.T, newStore func(t *testing.T) store.Store) {
 	t.Run("preferences", func(t *testing.T) { testPrefs(t, newStore(t)) })
 	t.Run("icons", func(t *testing.T) { testIcons(t, newStore(t)) })
 	t.Run("group access", func(t *testing.T) { testGroupAccess(t, newStore(t)) })
+	t.Run("metrics", func(t *testing.T) { testMetrics(t, newStore(t)) })
 }
 
 var ctx = context.Background()
@@ -553,6 +554,56 @@ func testPrefs(t *testing.T, s store.Store) {
 	must(t, s.DeleteUser(ctx, u2.ID))
 	if _, _, err := s.GetBackground(ctx, u2.ID); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("background survived the user: %v", err)
+	}
+}
+
+func testMetrics(t *testing.T, s store.Store) {
+	u, err := s.CreateUser(ctx, "px@example.com", "Px", store.RoleUser)
+	must(t, err)
+	a, err := s.GetMetricsAccess(ctx, u.ID)
+	must(t, err)
+	if a.Any() {
+		t.Fatalf("new user must have no access: %+v", a)
+	}
+	must(t, s.SetMetricsAccess(ctx, store.MetricsAccess{UserID: u.ID, Nodes: true, Alerts: true}))
+	a, _ = s.GetMetricsAccess(ctx, u.ID)
+	if !a.Nodes || a.Machines || !a.Alerts {
+		t.Fatalf("access not stored: %+v", a)
+	}
+	if l, _ := s.ListMetricsAccess(ctx); len(l) != 1 || l[0].UserID != u.ID {
+		t.Fatalf("list = %+v", l)
+	}
+	must(t, s.SetMetricsAccess(ctx, store.MetricsAccess{UserID: u.ID}))
+	if l, _ := s.ListMetricsAccess(ctx); len(l) != 0 {
+		t.Fatalf("an all-false row must not be listed: %+v", l)
+	}
+	isErr(t, s.SetMetricsAccess(ctx, store.MetricsAccess{UserID: 9999, Nodes: true}), store.ErrNotFound)
+
+	p, _ := s.GetMetricsPrefs(ctx, u.ID)
+	if p != store.DefaultMetricsPrefs(u.ID) {
+		t.Fatalf("defaults expected, got %+v", p)
+	}
+	p.Net, p.Machines, p.Warn, p.Crit, p.Refresh = true, false, 60, 85, 15
+	must(t, s.SetMetricsPrefs(ctx, p))
+	if got, _ := s.GetMetricsPrefs(ctx, u.ID); got != p {
+		t.Fatalf("prefs not stored: %+v vs %+v", got, p)
+	}
+	bad := p
+	bad.Warn, bad.Crit = 90, 80
+	if s.SetMetricsPrefs(ctx, bad) == nil {
+		t.Fatal("warn >= crit must be rejected")
+	}
+	bad = p
+	bad.Refresh = 1
+	if s.SetMetricsPrefs(ctx, bad) == nil {
+		t.Fatal("too short refresh must be rejected")
+	}
+	p.UserID = 9999
+	isErr(t, s.SetMetricsPrefs(ctx, p), store.ErrNotFound)
+
+	must(t, s.DeleteUser(ctx, u.ID))
+	if a, _ := s.GetMetricsAccess(ctx, u.ID); a.Any() {
+		t.Fatal("access must go with the user")
 	}
 }
 

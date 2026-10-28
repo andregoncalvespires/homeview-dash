@@ -33,6 +33,36 @@
   </form>
 </section>
 
+{{if .Data.PX.Access.Any}}
+<section class="panel">
+  <h2>{{t .Lang "settings.px"}}</h2>
+  <p class="muted">{{t .Lang "settings.px.intro"}}</p>
+  <form method="post" action="/settings/proxmox" class="form">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    {{if .Data.PX.Access.Nodes}}<label class="check"><input type="checkbox" name="nodes" value="1"{{if .Data.PX.Prefs.Nodes}} checked{{end}}> {{t .Lang "px.f.nodes"}}</label>{{end}}
+    {{if .Data.PX.Access.Machines}}<label class="check"><input type="checkbox" name="machines" value="1"{{if .Data.PX.Prefs.Machines}} checked{{end}}> {{t .Lang "px.f.machines"}}</label>{{end}}
+    {{if .Data.PX.Access.Alerts}}<label class="check"><input type="checkbox" name="alerts" value="1"{{if .Data.PX.Prefs.Alerts}} checked{{end}}> {{t .Lang "px.f.alerts"}}</label>{{end}}
+    {{if .Data.PX.Access.Machines}}
+    <fieldset>
+      <legend>{{t .Lang "px.f.cols"}}</legend>
+      <div class="choices">
+        <label class="check"><input type="checkbox" name="cpu" value="1"{{if .Data.PX.Prefs.CPU}} checked{{end}}> {{t .Lang "px.cpu"}}</label>
+        <label class="check"><input type="checkbox" name="mem" value="1"{{if .Data.PX.Prefs.Mem}} checked{{end}}> {{t .Lang "px.mem"}}</label>
+        <label class="check"><input type="checkbox" name="disk" value="1"{{if .Data.PX.Prefs.Disk}} checked{{end}}> {{t .Lang "px.disk"}}</label>
+        <label class="check"><input type="checkbox" name="net" value="1"{{if .Data.PX.Prefs.Net}} checked{{end}}> {{t .Lang "px.net"}}</label>
+      </div>
+    </fieldset>
+    {{end}}
+    <div class="form row">
+      <label>{{t .Lang "px.f.warn"}}<input type="number" name="warn" min="1" max="99" value="{{.Data.PX.Prefs.Warn}}" required></label>
+      <label>{{t .Lang "px.f.crit"}}<input type="number" name="crit" min="2" max="100" value="{{.Data.PX.Prefs.Crit}}" required></label>
+      <label>{{t .Lang "px.f.refresh"}}<input type="number" name="refresh" min="10" max="600" value="{{.Data.PX.Prefs.Refresh}}" required></label>
+    </div>
+    <div class="actions"><button class="btn primary" type="submit">{{t .Lang "f.save"}}</button></div>
+  </form>
+</section>
+{{end}}
+
 <section class="panel">
   <h2>{{t .Lang "settings.bg"}}</h2>
   <p class="muted">{{t .Lang "settings.bg.presets"}}</p>

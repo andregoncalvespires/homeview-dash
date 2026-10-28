@@ -4,7 +4,7 @@
 
 [English](README.en.md) · **Português (Brasil)**
 
-![licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue) ![status](https://img.shields.io/badge/status-v0.7%20em%20desenvolvimento-orange)
+![licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue) ![status](https://img.shields.io/badge/status-v0.8%20em%20desenvolvimento-orange)
 
 ## O que é
 
@@ -16,13 +16,14 @@ O HomeView é um painel simples para quem tem vários servidores, VMs e containe
 - **Dois endereços por serviço** (interno e externo). O painel destaca o endereço certo conforme você acessa de casa ou de fora, e mostra o outro como atalho.
 - **Interface em português e inglês**, clara no tema claro e no escuro, com busca instantânea no centro do cabeçalho (tecle `/`; no celular vira um ícone de lupa).
 
-### O que já funciona (v0.7)
+### O que já funciona (v0.8)
 
 - **Login sem senha**: código por e-mail + cookie por dispositivo, com a tela "Meus dispositivos" para revogar. Link de acesso único pelo console, para recuperação caso o e-mail falhe.
 - **Administrador criado pelo console**, sem gravar nada no `docker-compose.yml`.
 - **Usuários, grupos e serviços** (nome, descrição, ícone, URL interna, URL externa), com **catálogo de 35 aplicações** (ícone e porta sugerida) ou **ícone próprio** enviado do computador.
 - **Descoberta pelo Proxmox**: lê as VMs e LXCs do seu servidor ou cluster; você aprova o que vai para o painel, **com vários serviços por VM/LXC** e a possibilidade de apontar para o **IP do próprio host Proxmox**. O ponto verde/cinza mostra se estão rodando.
 - **Três visões do painel** (ícone de camadas ao lado da engrenagem): **Grupos** (os seus), **Infraestrutura** (por VM/LXC do Proxmox, com status e IP) e **Tipo** (Automação, Rede, Mídia…, com o tipo editável por serviço). A escolha fica salva no navegador.
+- **Métricas do Proxmox no topo do painel**: uma linha com um cartão por nó (CPU, memória e o uso de cada storage), até 4 por linha, e o botão **Ver VM/LXC** que abre, sobre os cards, o quadro de máquinas daquele nó (CPU, memória, disco e rede). Alertas de limite configuráveis. O administrador libera por usuário o que cada pessoa vê.
 - **Painel organizável**: reorganizar arrastando cards e grupos (duas colunas de grupos), **recolher/expandir grupos** (lembrado no navegador) e busca instantânea.
 - **Subgrupos e permissões por grupo**: um grupo pode ser restrito a administradores e às pessoas escolhidas (vale também para os subgrupos e em todas as visões).
 - **Editor YAML** de grupos, subgrupos, permissões e serviços, com validação antes de aplicar e download do arquivo.
@@ -33,7 +34,7 @@ O HomeView é um painel simples para quem tem vários servidores, VMs e containe
 
 | Versão | Entrega |
 |---|---|
-| v0.8 | A definir (ideias: permissões por papel, histórico de alterações) |
+| v0.9 | A definir (ideias: permissões por papel, histórico de alterações) |
 
 ## Instalação (3 passos)
 
@@ -142,6 +143,15 @@ Pontos importantes:
 - **IP do convidado** (best effort): LXC em execução informa o IP pela API; em VM, só com o *QEMU Guest Agent* instalado e habilitado. Sem IP, digite a URL.
 - **Sincronização**: automática a cada `HOMEVIEW_DISCOVERY_INTERVAL` e manual pelo botão. O que sumir do Proxmox fica marcado e você decide se esquece; um item volta sozinho se reaparecer. Excluir um serviço devolve o item à lista de "Novos". Itens "Ignorados" podem ser restaurados.
 - **Status**: serviços vindos do Proxmox mostram um ponto no cartão (verde = em execução, vazio = parado), conforme a última sincronização.
+
+### Métricas do Proxmox
+
+Com uma conexão cadastrada (veja acima), o topo do painel mostra uma linha com **um cartão por nó**: medidores de CPU e memória, uma barra para cada **storage** (os compartilhados aparecem uma vez só) e o tempo ligado. Cabem até 4 nós por linha (2 em telas médias e 1 no celular). Cada cartão tem o botão **Ver VM/LXC**, que abre por cima dos cards um quadro com as máquinas daquele nó: CPU, memória, disco e rede, com filtros *Todas*, *VMs*, *LXCs* e *Só com alerta*. Fecha com Esc, no ×, clicando fora ou no mesmo botão. A linha pode ser recolhida pelo título *Proxmox*.
+
+- **Quem vê**: em **Usuários** o administrador marca, para cada pessoa, o que ela pode ver: **Nós**, **Máquinas** e **Alertas**. Sem nada marcado, a linha nem aparece e a API não devolve dados. Administradores sempre veem tudo. Uma máquina ligada a serviços que a pessoa não enxerga (por exemplo, num grupo restrito) continua oculta para ela.
+- **O que cada um escolhe**: em **Aparência → Informações do Proxmox**, dentro do que foi liberado: mostrar nós, mostrar VMs/LXCs, destacar alertas, quais colunas o quadro mostra, os limites de **aviso** (amarelo, padrão 75%) e **crítico** (vermelho, padrão 90%) e o intervalo de atualização (padrão 30 s, de 10 a 600).
+- **Alertas**: o cartão ganha borda amarela ou vermelha quando CPU, memória ou um storage passam do limite, e o botão **Ver VM/LXC** mostra um selo com quantas máquinas estão em alerta, mesmo com o quadro fechado.
+- **Como os dados chegam**: o servidor lê o Proxmox com o mesmo token somente leitura da descoberta (papel *PVEAuditor*) e só quando alguém está com o painel aberto; várias pessoas compartilham a mesma leitura (renovada a cada 10 s no máximo). Se um servidor deixar de responder, o cartão mostra os últimos valores com o aviso *Dados desatualizados*. A taxa de rede é calculada entre duas leituras. VMs sem o *QEMU Guest Agent* não informam o uso de disco, então só o tamanho aparece.
 
 ### Visões do painel
 

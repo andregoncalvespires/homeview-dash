@@ -277,3 +277,304 @@
     if (msg && !window.confirm(msg)) e.preventDefault();
   });
 })();
+
+// Proxmox row: node cards on top of the dashboard, and an overlay panel with the
+// machines of one node. Everything is drawn with DOM calls (no inline styles).
+(function () {
+  var root = document.getElementById('px');
+  if (!root) return;
+  var L = {};
+  try { L = JSON.parse(root.getAttribute('data-l') || '{}'); } catch (e) { L = {}; }
+  var every = Math.max(10, parseInt(root.getAttribute('data-refresh'), 10) || 30) * 1000;
+  var url = root.getAttribute('data-url');
+  var lang = document.documentElement.lang || undefined;
+  var data = null, open = null, filter = 'all', collapsed = false, timer = null;
+  try { collapsed = localStorage.getItem('hv_px_collapsed') === '1'; } catch (e) { /* storage may be blocked */ }
+
+  var NS = 'http://www.w3.org/2000/svg';
+  function el(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+  function num(v, d) { return Number(v).toLocaleString(lang, { maximumFractionDigits: d === undefined ? 1 : d }); }
+  function pct(used, total) { return total > 0 ? Math.max(0, Math.min(100, used / total * 100)) : 0; }
+  function size(b) {
+    var u = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'], i = 0;
+    while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+    return num(b, b >= 100 || i === 0 ? 0 : 1) + ' ' + u[i];
+  }
+  function rate(b) { return size(b) + '/s'; }
+  function uptime(s) {
+    var d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+    return d > 0 ? d + ' d ' + h + ' h' : h > 0 ? h + ' h ' + m + ' min' : m + ' min';
+  }
+  function lvl(p, o) { return !o.alerts ? '' : p >= o.crit ? 'bad' : p >= o.warn ? 'warn' : ''; }
+  function worse(a, b) { return a === 'bad' || b === 'bad' ? 'bad' : a === 'warn' || b === 'warn' ? 'warn' : ''; }
+
+  function gauge(label, p, sub, o) {
+    var g = el('div', 'px-g ' + lvl(p, o));
+    var wrap = el('div', 'px-gwrap');
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 36 36');
+    svg.setAttribute('aria-hidden', 'true');
+    ['tr', 'vl'].forEach(function (c) {
+      var ci = document.createElementNS(NS, 'circle');
+      ci.setAttribute('class', c);
+      ci.setAttribute('cx', '18'); ci.setAttribute('cy', '18'); ci.setAttribute('r', '15.9');
+      if (c === 'vl') ci.setAttribute('stroke-dasharray', p.toFixed(1) + ' 100');
+      svg.appendChild(ci);
+    });
+    wrap.appendChild(svg);
+    wrap.appendChild(el('b', '', num(p, 0) + '%'));
+    g.appendChild(wrap);
+    g.appendChild(el('span', '', label));
+    if (sub) g.appendChild(el('small', '', sub));
+    return g;
+  }
+  function bar(p, o) {
+    var b = el('span', 'px-bar ' + lvl(p, o));
+    var i = document.createElement('i');
+    i.style.width = p.toFixed(1) + '%';
+    b.appendChild(i);
+    return b;
+  }
+
+  // Alert summary of a node's machines: count and worst level.
+  function guestAlerts(n, o) {
+    var count = 0, worst = '';
+    if (!o.alerts) return { count: 0, worst: '' };
+    n.guests.forEach(function (g) {
+      if (!g.running) return;
+      var l = worse(worse(lvl(g.cpu, o), lvl(pct(g.mem[0], g.mem[1]), o)), lvl(pct(g.disk[0], g.disk[1]), o));
+      if (l) { count++; worst = worse(worst, l); }
+    });
+    return { count: count, worst: worst };
+  }
+
+  function nodeCard(c, n, o) {
+    var mp = pct(n.mem[0], n.mem[1]);
+    var level = '';
+    if (n.online) {
+      level = worse(lvl(n.cpu, o), lvl(mp, o));
+      n.storages.forEach(function (s) { level = worse(level, lvl(pct(s.used, s.total), o)); });
+    }
+    var ga = guestAlerts(n, o);
+    var card = el('article', 'px-card' + (n.online ? '' : ' off') + (level ? ' ' + level : ''));
+    var t = el('div', 'px-title');
+    var dot = el('span', 'dot ' + (n.online ? 'running' : 'stopped'));
+    dot.setAttribute('role', 'img');
+    dot.setAttribute('aria-label', n.online ? L.running : L.offline);
+    t.appendChild(dot);
+    t.appendChild(el('strong', '', n.name));
+    if (n.online && n.uptime) t.appendChild(el('small', '', L.up + ' ' + uptime(n.uptime)));
+    card.appendChild(t);
+    var sub = [c.name];
+    if (n.online && n.cpus) sub.push(n.cpus + ' ' + L.vcpu);
+    if (c.err) sub.push(L.stale);
+    var subEl = el('div', 'px-sub', sub.join(' · '));
+    if (c.err) subEl.title = c.err;
+    card.appendChild(subEl);
+
+    if (!n.online) {
+      card.appendChild(el('div', 'px-note', L.offline));
+    } else {
+      var gs = el('div', 'px-gauges');
+      gs.appendChild(gauge(L.cpu, n.cpu, '', o));
+      gs.appendChild(gauge(L.mem, mp, size(n.mem[0]) + ' / ' + size(n.mem[1]), o));
+      card.appendChild(gs);
+      if (n.storages.length) {
+        var st = el('div', 'px-st');
+        n.storages.forEach(function (s) {
+          var p = pct(s.used, s.total);
+          var row = el('div');
+          row.appendChild(el('span', '', s.name));
+          row.appendChild(bar(p, o));
+          row.appendChild(el('span', '', num(p, 0) + '%'));
+          row.title = s.name + ': ' + size(s.used) + ' / ' + size(s.total);
+          st.appendChild(row);
+        });
+        card.appendChild(st);
+      }
+    }
+    if (o.machines && n.guests.length) {
+      var key = c.name + '/' + n.name;
+      var btn = el('button', 'px-more');
+      btn.type = 'button';
+      btn.setAttribute('aria-expanded', open === key ? 'true' : 'false');
+      btn.setAttribute('data-key', key);
+      btn.appendChild(el('span', '', (open === key ? L.hide : L.show) + ' (' + n.guests.length + ')'));
+      if (ga.count) {
+        var bd = el('span', 'px-badge ' + ga.worst, String(ga.count));
+        bd.title = ga.count + ' ' + L.alertn;
+        btn.appendChild(bd);
+      }
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        open = open === key ? null : key;
+        filter = 'all';
+        render();
+      });
+      card.appendChild(btn);
+    }
+    return card;
+  }
+
+  function guestRow(g, o) {
+    var r = el('div', 'px-guest' + (g.running ? '' : ' down'));
+    var nm = el('div', 'px-gn');
+    var dot = el('span', 'dot ' + (g.running ? 'running' : 'stopped'));
+    dot.setAttribute('role', 'img');
+    dot.setAttribute('aria-label', g.running ? L.running : L.stopped);
+    nm.appendChild(dot);
+    nm.appendChild(el('strong', '', g.name));
+    nm.appendChild(el('small', '', (g.kind === 'qemu' ? L.vm : L.lxc) + ' ' + g.vmid));
+    r.appendChild(nm);
+    function cell(show, label, p, text) {
+      if (!show) return;
+      var c = el('div', 'px-cell');
+      c.appendChild(el('span', 'px-cl', label)); // column title, shown on narrow screens only
+      if (!g.running || p === null) { c.appendChild(el('span', '', g.running && text ? text : '—')); r.appendChild(c); return; }
+      c.appendChild(bar(p, o));
+      c.appendChild(el('b', '', num(p, 0) + '%'));
+      c.title = text || '';
+      r.appendChild(c);
+    }
+    cell(o.cpu, L.cpu, g.cpu, g.cpus ? g.cpus + ' ' + L.vcpu : '');
+    cell(o.mem, L.mem, pct(g.mem[0], g.mem[1]), size(g.mem[0]) + ' / ' + size(g.mem[1]));
+    // QEMU guests report no disk usage without the agent: show only the size.
+    cell(o.disk, L.disk, g.kind === 'qemu' && g.disk[0] === 0 ? null : pct(g.disk[0], g.disk[1]), g.disk[1] ? size(g.disk[1]) : '');
+    if (o.net) {
+      var c = el('div', 'px-cell');
+      c.appendChild(el('span', 'px-cl', L.net));
+      c.appendChild(el('span', '', g.running ? '↓ ' + rate(g.in) + '  ↑ ' + rate(g.out) : '—'));
+      r.appendChild(c);
+    }
+    return r;
+  }
+
+  function guestMatches(g, o) {
+    if (filter === 'vm') return g.kind === 'qemu';
+    if (filter === 'lxc') return g.kind === 'lxc';
+    if (filter === 'alert') {
+      return g.running && (lvl(g.cpu, o) || lvl(pct(g.mem[0], g.mem[1]), o) || lvl(pct(g.disk[0], g.disk[1]), o));
+    }
+    return true;
+  }
+
+  function panel(c, n, o) {
+    var p = el('section', 'px-panel');
+    p.setAttribute('role', 'region');
+    p.setAttribute('aria-label', L.machines + ' ' + n.name);
+    var h = el('div', 'px-phead');
+    h.appendChild(el('strong', '', n.name + ' · ' + L.machines));
+    var pills = [['all', L.all], ['vm', L.vms], ['lxc', L.lxcs]];
+    if (o.alerts) pills.push(['alert', L.alerts]);
+    pills.forEach(function (pl) {
+      var b = el('button', 'px-pill', pl[1]);
+      b.type = 'button';
+      b.setAttribute('aria-pressed', filter === pl[0] ? 'true' : 'false');
+      b.addEventListener('click', function (e) { e.stopPropagation(); filter = pl[0]; render(); });
+      h.appendChild(b);
+    });
+    var x = el('button', 'px-close', '×');
+    x.type = 'button';
+    x.setAttribute('aria-label', L.close);
+    x.addEventListener('click', function (e) { e.stopPropagation(); open = null; render(); });
+    h.appendChild(x);
+    p.appendChild(h);
+
+    var cols = [o.cpu, o.mem, o.disk, o.net].filter(Boolean).length;
+    var list = el('div', 'px-guests');
+    list.style.setProperty('--cols', String(Math.max(1, cols)));
+    var head = el('div', 'px-guest head');
+    head.appendChild(el('span', '', L.machines));
+    if (o.cpu) head.appendChild(el('span', '', L.cpu));
+    if (o.mem) head.appendChild(el('span', '', L.mem));
+    if (o.disk) head.appendChild(el('span', '', L.disk));
+    if (o.net) head.appendChild(el('span', '', L.net));
+    list.appendChild(head);
+    var shown = n.guests.filter(function (g) { return guestMatches(g, o); });
+    shown.forEach(function (g) {
+      var r = guestRow(g, o);
+      r.style.setProperty('--cols', String(Math.max(1, cols)));
+      list.appendChild(r);
+    });
+    p.appendChild(list);
+    if (!shown.length) p.appendChild(el('p', 'px-note', L.none));
+    p.addEventListener('click', function (e) { e.stopPropagation(); });
+    return p;
+  }
+
+  function place() {
+    var p = root.querySelector('.px-panel'), b = root.querySelector('.px-more[aria-expanded="true"]');
+    if (!p || !b) return;
+    var card = b.closest('.px-card');
+    p.style.top = (card.offsetTop + card.offsetHeight + 8) + 'px';
+  }
+
+  function render() {
+    root.textContent = '';
+    if (!data || !data.conns.length) return;
+    var o = data.opts;
+    var head = el('div', 'px-head');
+    var tg = el('button', 'px-toggle', L.title);
+    tg.type = 'button';
+    tg.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    tg.addEventListener('click', function () {
+      collapsed = !collapsed;
+      try { localStorage.setItem('hv_px_collapsed', collapsed ? '1' : '0'); } catch (e) { /* ignore */ }
+      if (collapsed) open = null;
+      render();
+    });
+    head.appendChild(tg);
+    var newest = 0;
+    data.conns.forEach(function (c) { if (c.at > newest) newest = c.at; });
+    if (newest) head.appendChild(el('span', 'px-at', new Date(newest * 1000).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit', second: '2-digit' })));
+    root.appendChild(head);
+    if (collapsed) return;
+
+    var row = el('div', 'px-row');
+    var openNode = null;
+    data.conns.forEach(function (c) {
+      if (!c.nodes.length) {
+        var card = el('article', 'px-card off');
+        card.appendChild(el('div', 'px-title')).appendChild(el('strong', '', c.name));
+        card.appendChild(el('div', 'px-note', L.noread + (c.err ? ': ' + c.err : '')));
+        row.appendChild(card);
+        return;
+      }
+      c.nodes.forEach(function (n) {
+        row.appendChild(nodeCard(c, n, o));
+        if (open === c.name + '/' + n.name) openNode = { c: c, n: n };
+      });
+    });
+    root.appendChild(row);
+    if (openNode) {
+      root.appendChild(panel(openNode.c, openNode.n, o));
+      place();
+    } else { open = null; }
+  }
+
+  function load() {
+    if (document.hidden) return;
+    fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
+      .then(function (d) {
+        data = d;
+        var next = Math.max(10, d.opts.refresh || 30) * 1000;
+        if (next !== every) { every = next; start(); }
+        render();
+      })
+      .catch(function () { /* keep what is on screen; try again at the next tick */ });
+  }
+  function start() { if (timer) clearInterval(timer); timer = setInterval(load, every); }
+
+  document.addEventListener('click', function () { if (open) { open = null; render(); } });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && open) { open = null; render(); } });
+  window.addEventListener('resize', place);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
+  start();
+  load();
+})();

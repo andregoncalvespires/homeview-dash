@@ -158,6 +158,7 @@ type dashboardData struct {
 	Groups      []groupView
 	HasServices bool
 	Mode        string // viewGroups, viewInfra or viewType
+	PX          *pxPanel
 }
 
 func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session) {
@@ -338,6 +339,7 @@ func (s *Server) dashboard(w http.ResponseWriter, r *http.Request, sess *session
 		sections = append(sections, other)
 	}
 	data := finish(sections)
+	data.PX = s.pxPanel(ctx, sess.User, lang)
 	s.render(w, r, sess, "dashboard", http.StatusOK, &page{Data: data, Views: s.viewMenu(lang, mode), Search: data.HasServices})
 }
 

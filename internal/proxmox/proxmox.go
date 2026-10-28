@@ -348,3 +348,109 @@ func (c *Client) Nodes(ctx context.Context) ([]Node, error) {
 	}
 	return out, nil
 }
+
+// NodeMetrics is the current load of one host. CPU is a fraction (0..1).
+type NodeMetrics struct {
+	Name          string
+	Online        bool
+	CPU           float64
+	MaxCPU        int
+	Mem, MaxMem   int64
+	Disk, MaxDisk int64 // the host's root file system
+	Uptime        int64 // seconds
+}
+
+// StorageMetrics is one storage as seen from one host.
+type StorageMetrics struct {
+	Node, Name  string
+	Shared      bool
+	Used, Total int64
+}
+
+// GuestMetrics is the current load of one VM or container.
+type GuestMetrics struct {
+	VMID          int
+	Kind          string
+	Name, Node    string
+	Running       bool
+	CPU           float64 // fraction of MaxCPU, 0..1
+	MaxCPU        int
+	Mem, MaxMem   int64
+	Disk, MaxDisk int64
+	NetIn, NetOut int64 // cumulative bytes since the guest started
+	Uptime        int64
+}
+
+// Metrics is one reading of the whole server or cluster.
+type Metrics struct {
+	Nodes    []NodeMetrics
+	Storages []StorageMetrics
+	Guests   []GuestMetrics
+}
+
+type usage struct {
+	Type    string  `json:"type"`
+	VMID    int     `json:"vmid"`
+	Name    string  `json:"name"`
+	Node    string  `json:"node"`
+	Status  string  `json:"status"`
+	Storage string  `json:"storage"`
+	Shared  int     `json:"shared"`
+	Templ   int     `json:"template"`
+	CPU     float64 `json:"cpu"`
+	MaxCPU  float64 `json:"maxcpu"`
+	Mem     float64 `json:"mem"`
+	MaxMem  float64 `json:"maxmem"`
+	Disk    float64 `json:"disk"`
+	MaxDisk float64 `json:"maxdisk"`
+	NetIn   float64 `json:"netin"`
+	NetOut  float64 `json:"netout"`
+	Uptime  float64 `json:"uptime"`
+}
+
+// Metrics reads the load of every host, storage, VM and container in one call.
+func (c *Client) Metrics(ctx context.Context) (Metrics, error) {
+	var res []usage
+	if err := c.get(ctx, "/cluster/resources", &res); err != nil {
+		return Metrics{}, err
+	}
+	var m Metrics
+	for _, r := range res {
+		if r.Node == "" {
+			continue
+		}
+		switch r.Type {
+		case "node":
+			m.Nodes = append(m.Nodes, NodeMetrics{Name: r.Node, Online: r.Status == "online", CPU: r.CPU, MaxCPU: int(r.MaxCPU),
+				Mem: int64(r.Mem), MaxMem: int64(r.MaxMem), Disk: int64(r.Disk), MaxDisk: int64(r.MaxDisk), Uptime: int64(r.Uptime)})
+		case "storage":
+			if r.Storage == "" || r.MaxDisk <= 0 || (r.Status != "" && r.Status != "available") {
+				continue
+			}
+			m.Storages = append(m.Storages, StorageMetrics{Node: r.Node, Name: r.Storage, Shared: r.Shared == 1,
+				Used: int64(r.Disk), Total: int64(r.MaxDisk)})
+		case KindLXC, KindQEMU:
+			if r.VMID <= 0 || r.Templ == 1 {
+				continue
+			}
+			m.Guests = append(m.Guests, GuestMetrics{VMID: r.VMID, Kind: r.Type, Name: r.Name, Node: r.Node,
+				Running: r.Status == "running", CPU: r.CPU, MaxCPU: int(r.MaxCPU),
+				Mem: int64(r.Mem), MaxMem: int64(r.MaxMem), Disk: int64(r.Disk), MaxDisk: int64(r.MaxDisk),
+				NetIn: int64(r.NetIn), NetOut: int64(r.NetOut), Uptime: int64(r.Uptime)})
+		}
+	}
+	sort.Slice(m.Nodes, func(i, j int) bool { return m.Nodes[i].Name < m.Nodes[j].Name })
+	sort.Slice(m.Storages, func(i, j int) bool {
+		if m.Storages[i].Node != m.Storages[j].Node {
+			return m.Storages[i].Node < m.Storages[j].Node
+		}
+		return m.Storages[i].Name < m.Storages[j].Name
+	})
+	sort.Slice(m.Guests, func(i, j int) bool {
+		if m.Guests[i].Node != m.Guests[j].Node {
+			return m.Guests[i].Node < m.Guests[j].Node
+		}
+		return m.Guests[i].VMID < m.Guests[j].VMID
+	})
+	return m, nil
+}

@@ -14,13 +14,16 @@ import (
 )
 
 type fakePVE struct {
-	guests []proxmox.Guest
-	nodes  []proxmox.Node
-	err    error
+	guests  []proxmox.Guest
+	nodes   []proxmox.Node
+	err     error
+	metrics proxmox.Metrics
+	merr    error
 }
 
-func (f *fakePVE) Guests(context.Context) ([]proxmox.Guest, error) { return f.guests, f.err }
-func (f *fakePVE) Nodes(context.Context) ([]proxmox.Node, error)   { return f.nodes, nil }
+func (f *fakePVE) Guests(context.Context) ([]proxmox.Guest, error)  { return f.guests, f.err }
+func (f *fakePVE) Metrics(context.Context) (proxmox.Metrics, error) { return f.metrics, f.merr }
+func (f *fakePVE) Nodes(context.Context) ([]proxmox.Node, error)    { return f.nodes, nil }
 
 const pveSecret = "very-secret-token-value"
 

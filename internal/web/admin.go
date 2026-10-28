@@ -462,7 +462,12 @@ func (s *Server) deleteGroup(w http.ResponseWriter, r *http.Request, sess *sessi
 
 // ---- users ----
 
-type adminUsersData struct{ Users []store.User }
+type adminUserRow struct {
+	store.User
+	PX store.MetricsAccess
+}
+
+type adminUsersData struct{ Users []adminUserRow }
 
 func (s *Server) getAdminUsers(w http.ResponseWriter, r *http.Request, sess *session) {
 	users, err := s.st.ListUsers(r.Context())
@@ -470,7 +475,20 @@ func (s *Server) getAdminUsers(w http.ResponseWriter, r *http.Request, sess *ses
 		s.serverError(w, r, sess, err)
 		return
 	}
-	s.render(w, r, sess, "admin_users", http.StatusOK, &page{TitleKey: "admin.users.title", Data: adminUsersData{Users: users}})
+	access, err := s.st.ListMetricsAccess(r.Context())
+	if err != nil {
+		s.serverError(w, r, sess, err)
+		return
+	}
+	byUser := map[int64]store.MetricsAccess{}
+	for _, a := range access {
+		byUser[a.UserID] = a
+	}
+	data := adminUsersData{}
+	for _, u := range users {
+		data.Users = append(data.Users, adminUserRow{User: u, PX: byUser[u.ID]})
+	}
+	s.render(w, r, sess, "admin_users", http.StatusOK, &page{TitleKey: "admin.users.title", Data: data})
 }
 
 func (s *Server) addUser(w http.ResponseWriter, r *http.Request, sess *session) {

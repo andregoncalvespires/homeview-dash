@@ -168,6 +168,45 @@ type Prefs struct {
 // ShowsBackground reports whether any background (upload or bundled) applies.
 func (p Prefs) ShowsBackground() bool { return p.HasBg || p.BgPreset != "" }
 
+// MetricsAccess says which Proxmox figures an administrator lets a user see.
+// Administrators always see everything and need no row.
+type MetricsAccess struct {
+	UserID                  int64
+	Nodes, Machines, Alerts bool
+}
+
+// Any reports whether at least one kind of figure is allowed.
+func (a MetricsAccess) Any() bool { return a.Nodes || a.Machines || a.Alerts }
+
+// MetricsPrefs are what a user chose to see of what they are allowed to see.
+type MetricsPrefs struct {
+	UserID                  int64
+	Nodes, Machines, Alerts bool
+	CPU, Mem, Disk, Net     bool // columns of the machine panel
+	Warn, Crit              int  // percent thresholds, 1 <= Warn < Crit <= 100
+	Refresh                 int  // seconds between updates
+}
+
+// Metrics defaults and limits.
+const (
+	DefaultWarn    = 75
+	DefaultCrit    = 90
+	DefaultRefresh = 30
+	MinRefresh     = 10
+	MaxRefresh     = 600
+)
+
+// DefaultMetricsPrefs are used until a user changes something.
+func DefaultMetricsPrefs(userID int64) MetricsPrefs {
+	return MetricsPrefs{UserID: userID, Nodes: true, Machines: true, Alerts: true,
+		CPU: true, Mem: true, Disk: true, Warn: DefaultWarn, Crit: DefaultCrit, Refresh: DefaultRefresh}
+}
+
+// Valid reports whether the thresholds and interval are in range.
+func (p MetricsPrefs) Valid() bool {
+	return p.Warn >= 1 && p.Warn < p.Crit && p.Crit <= 100 && p.Refresh >= MinRefresh && p.Refresh <= MaxRefresh
+}
+
 // DefaultPrefs are used until a user changes something.
 func DefaultPrefs(userID int64) Prefs {
 	return Prefs{UserID: userID, Theme: ThemeDark, BgDim: DefaultBgDim, BgPreset: DefaultBgPreset}
@@ -245,6 +284,16 @@ type Store interface {
 	// DefaultPrefs. The writes return ErrNotFound when the user does not exist.
 	GetPrefs(ctx context.Context, userID int64) (Prefs, error)
 	SavePrefs(ctx context.Context, p Prefs) error // theme, accent and dim only
+	// Proxmox figures. Access is set by an administrator, preferences by the
+	// user. Both getters never fail for a missing row (no access / defaults);
+	// the writes return ErrNotFound when the user does not exist, and
+	// SetMetricsPrefs rejects invalid thresholds.
+	GetMetricsAccess(ctx context.Context, userID int64) (MetricsAccess, error)
+	SetMetricsAccess(ctx context.Context, a MetricsAccess) error
+	ListMetricsAccess(ctx context.Context) ([]MetricsAccess, error)
+	GetMetricsPrefs(ctx context.Context, userID int64) (MetricsPrefs, error)
+	SetMetricsPrefs(ctx context.Context, p MetricsPrefs) error
+
 	// GetBackground returns the stored image or ErrNotFound.
 	GetBackground(ctx context.Context, userID int64) (contentType string, data []byte, err error)
 	SetBackground(ctx context.Context, userID int64, contentType string, data []byte, at time.Time) error

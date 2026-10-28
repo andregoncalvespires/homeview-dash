@@ -27,8 +27,17 @@ func fakePVE(t *testing.T) *httptest.Server {
 		}
 	}
 	mux.HandleFunc("/api2/json/cluster/resources", wrap(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("type") != "vm" {
-			t.Errorf("query = %q", r.URL.RawQuery)
+		if r.URL.Query().Get("type") == "" {
+			w.Write([]byte(`{"data":[
+			 {"type":"node","node":"pve1","status":"online","cpu":0.23,"maxcpu":8,"mem":8000,"maxmem":32000,"disk":10,"maxdisk":100,"uptime":99},
+			 {"type":"node","node":"pve2","status":"offline"},
+			 {"type":"storage","node":"pve1","storage":"local-lvm","status":"available","disk":40,"maxdisk":100},
+			 {"type":"storage","node":"pve1","storage":"nas","shared":1,"status":"available","disk":500,"maxdisk":1000},
+			 {"type":"storage","node":"pve1","storage":"gone","status":"unknown","disk":0,"maxdisk":0},
+			 {"type":"lxc","vmid":103,"name":"docker","node":"pve1","status":"running","cpu":0.5,"maxcpu":2,"mem":100,"maxmem":512,"disk":6,"maxdisk":8,"netin":10,"netout":20,"uptime":5},
+			 {"type":"qemu","vmid":9000,"name":"tpl","node":"pve1","template":1}
+			]}`))
+			return
 		}
 		w.Write([]byte(`{"data":[
 		 {"type":"qemu","vmid":100,"name":"haos","node":"pve1","status":"running","template":0},
@@ -199,5 +208,25 @@ func TestNodes(t *testing.T) {
 	ns, err := c.Nodes(context.Background())
 	if err != nil || len(ns) != 2 || ns[0] != (Node{"pve1", "192.168.77.2"}) || ns[1].Name != "pve2" || ns[1].IP != "" {
 		t.Fatalf("nodes = %+v, %v", ns, err)
+	}
+}
+
+func TestMetrics(t *testing.T) {
+	srv := fakePVE(t)
+	defer srv.Close()
+	c, _ := New(Config{URL: srv.URL, TokenID: tokenID, Secret: secret, Insecure: true})
+	m, err := c.Metrics(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Nodes) != 2 || m.Nodes[0].Name != "pve1" || !m.Nodes[0].Online || m.Nodes[0].CPU != 0.23 ||
+		m.Nodes[0].MaxMem != 32000 || m.Nodes[1].Online {
+		t.Fatalf("nodes = %+v", m.Nodes)
+	}
+	if len(m.Storages) != 2 || m.Storages[0].Name != "local-lvm" || m.Storages[1].Name != "nas" || !m.Storages[1].Shared {
+		t.Fatalf("storages (unavailable ones are dropped) = %+v", m.Storages)
+	}
+	if len(m.Guests) != 1 || m.Guests[0].VMID != 103 || !m.Guests[0].Running || m.Guests[0].NetOut != 20 {
+		t.Fatalf("guests (templates are dropped) = %+v", m.Guests)
 	}
 }
