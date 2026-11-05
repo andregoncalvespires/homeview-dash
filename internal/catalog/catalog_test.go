@@ -7,8 +7,8 @@ import (
 
 func TestCatalogIntegrity(t *testing.T) {
 	seen := map[string]bool{}
-	if len(apps) < 35 {
-		t.Errorf("catalog has %d apps, expected at least the 35 expected", len(apps))
+	if len(apps) < 36 {
+		t.Errorf("catalog has %d apps, expected at least the 36 expected", len(apps))
 	}
 	for _, a := range apps {
 		if a.ID == "" || a.Name == "" || a.File == "" || seen[a.ID] {
@@ -51,6 +51,9 @@ func TestMatch(t *testing.T) {
 		"influxdb2":                        "influxdb",
 		"matter-server":                    "matter",
 		"lxc-debian12":                     "debian",
+		"nginx":                            "nginx",
+		"lxc-nginx-proxy":                  "nginx",
+		"nginx:1.27-alpine":                "nginx",
 	}
 	for in, want := range cases {
 		got, ok := Match(in)

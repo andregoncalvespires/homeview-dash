@@ -19,7 +19,7 @@ var categoryOf = map[string]string{
 	"matter": CatAutomation, "mqtt": CatAutomation, "emqx": CatAutomation, "mqtt-explorer": CatAutomation,
 	"frigate": CatAutomation, "go2rtc": CatAutomation,
 	"omada": CatNetwork, "openwrt": CatNetwork, "unifi": CatNetwork, "pi-hole": CatNetwork, "adguard-home": CatNetwork,
-	"wireguard": CatNetwork, "tailscale": CatNetwork, "cloudflared": CatNetwork, "cloudflare-ddns": CatNetwork, "openspeedtest": CatNetwork,
+	"wireguard": CatNetwork, "nginx": CatNetwork, "tailscale": CatNetwork, "cloudflared": CatNetwork, "cloudflare-ddns": CatNetwork, "openspeedtest": CatNetwork,
 	"immich": CatMedia, "jellyfin": CatMedia, "music-assistant": CatMedia, "qbittorrent": CatMedia,
 	"openmediavault": CatStorage, "filebrowser": CatStorage,
 	"grafana": CatMonitoring, "influxdb": CatMonitoring,

@@ -20,7 +20,7 @@ HomeView is a simple dashboard for people with several servers, VMs and containe
 
 - **Passwordless sign-in**: e-mail code + per-device cookie, with a "My devices" page to revoke access. A one-time sign-in link from the console is the recovery path if e-mail is down.
 - **Administrator created from the console**, nothing written to `docker-compose.yml`.
-- **Users, groups and services** (name, description, icon, internal URL, external URL), with a **35-application catalog** (icon and suggested port) or a **custom icon** uploaded from your computer.
+- **Users, groups and services** (name, description, icon, internal URL, external URL), with a **36-application catalog** (icon and suggested port) or a **custom icon** uploaded from your computer.
 - **Proxmox discovery**: reads the VMs and LXCs of your server or cluster; you approve what goes on the dashboard, with **several services per VM/LXC** and the option to point at the **Proxmox host's own IP**. A green/grey dot shows whether they are running.
 - **Three dashboard views** (layers icon next to the gear): **Groups** (your own), **Infrastructure** (by Proxmox VM/LXC, with status and IP) and **Type** (Automation, Network, Media…, with an editable type per service). The choice is remembered in the browser.
 - **Proxmox figures at the top of the dashboard**: a row with one card per node (CPU, memory and the usage of every storage), up to 4 per row, and a **Show VMs/LXCs** button that opens the node's machines panel (CPU, memory, disk and network) over the cards. Configurable threshold alerts. The administrator decides per user what each person sees.

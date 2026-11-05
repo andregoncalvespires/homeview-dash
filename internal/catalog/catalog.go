@@ -105,6 +105,7 @@ var apps = []App{
 	web("qbittorrent", "qBittorrent", "qbittorrent.svg", "http", 8080, nil, "", "qbittorrent", "qbit"),
 	web("openspeedtest", "OpenSpeedTest", "openspeedtest.svg", "http", 3000, []int{3001}, "", "openspeedtest", "speedtest"),
 	web("filebrowser", "FileBrowser", "filebrowser.svg", "http", 8080, []int{80}, "", "filebrowser"),
+	web("nginx", "Nginx", "nginx.svg", "http", 80, []int{443, 8080}, "", "nginx"),
 	web("openwrt", "OpenWrt", "openwrt.svg", "http", 80, nil, "", "openwrt"),
 	web("unifi", "UniFi OS", "unifi.svg", "https", 443, []int{8443}, "", "unifi"),
 	web("pi-hole", "Pi-hole", "pi-hole.svg", "http", 80, nil, "/admin", "pihole"),

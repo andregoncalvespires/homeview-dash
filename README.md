@@ -20,7 +20,7 @@ O HomeView é um painel simples para quem tem vários servidores, VMs e containe
 
 - **Login sem senha**: código por e-mail + cookie por dispositivo, com a tela "Meus dispositivos" para revogar. Link de acesso único pelo console, para recuperação caso o e-mail falhe.
 - **Administrador criado pelo console**, sem gravar nada no `docker-compose.yml`.
-- **Usuários, grupos e serviços** (nome, descrição, ícone, URL interna, URL externa), com **catálogo de 35 aplicações** (ícone e porta sugerida) ou **ícone próprio** enviado do computador.
+- **Usuários, grupos e serviços** (nome, descrição, ícone, URL interna, URL externa), com **catálogo de 36 aplicações** (ícone e porta sugerida) ou **ícone próprio** enviado do computador.
 - **Descoberta pelo Proxmox**: lê as VMs e LXCs do seu servidor ou cluster; você aprova o que vai para o painel, **com vários serviços por VM/LXC** e a possibilidade de apontar para o **IP do próprio host Proxmox**. O ponto verde/cinza mostra se estão rodando.
 - **Três visões do painel** (ícone de camadas ao lado da engrenagem): **Grupos** (os seus), **Infraestrutura** (por VM/LXC do Proxmox, com status e IP) e **Tipo** (Automação, Rede, Mídia…, com o tipo editável por serviço). A escolha fica salva no navegador.
 - **Métricas do Proxmox no topo do painel**: uma linha com um cartão por nó (CPU, memória e o uso de cada storage), até 4 por linha, e o botão **Ver VM/LXC** que abre, sobre os cards, o quadro de máquinas daquele nó (CPU, memória, disco e rede). Alertas de limite configuráveis. O administrador libera por usuário o que cada pessoa vê.
